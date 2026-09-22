@@ -18,6 +18,7 @@ import type {
 import type { PlatformAdapter, RawPort } from '../../platform/types'
 import type { ProcessResolver } from '../resolve/ProcessResolver'
 import type { SecurityInput } from '../security/SecurityClassifier'
+import type { SessionStore } from '../store/SessionStore'
 import { MemoryStore } from '../store/MemoryStore'
 import { computeStats } from './exposure'
 import { diffSnapshots } from './DiffEngine'
@@ -44,16 +45,34 @@ export interface ScanCycleResult {
   stats: PortListResult['stats']
 }
 
+/** 扫描周期附加配置（阶段 5：SQLite 会话持久化 + last_seen 批量节流） */
+export interface PortManagerOptions {
+  /** 会话持久化（提供后按需求 §10.1 在四类 Diff 事件时写库） */
+  sessionStore?: SessionStore
+  /** last_seen 批量 UPDATE 节流间隔（方案 §5.14：60s） */
+  touchIntervalMs?: number
+  /** 时钟注入（timing 用例：firstSeen 不变 / lastSeen 递增的可测性） */
+  nowFn?: () => number
+}
+
 export class PortManager {
   private readonly store = new MemoryStore()
   private readonly enhancers: PortManagerEnhancers
+  private readonly sessionStore: SessionStore | undefined
+  private readonly touchIntervalMs: number
+  private readonly nowFn: () => number
+  private lastTouchAt = 0
 
   constructor(
     private readonly adapter: PlatformAdapter,
     private readonly resolver: ProcessResolver,
-    enhancers: PortManagerEnhancers = {}
+    enhancers: PortManagerEnhancers = {},
+    options: PortManagerOptions = {}
   ) {
     this.enhancers = enhancers
+    this.sessionStore = options.sessionStore
+    this.touchIntervalMs = options.touchIntervalMs ?? 60000
+    this.nowFn = options.nowFn ?? (() => Date.now())
   }
 
   /**
@@ -89,6 +108,7 @@ export class PortManager {
   async scanCycle(): Promise<ScanCycleResult> {
     let error: string | null = null
     let events: DiffEvent[] = []
+    const now = this.nowFn()
     try {
       const ports = await this.adapter.scanPorts()
       const procTable = await this.adapter.getProcessTable()
@@ -103,10 +123,17 @@ export class PortManager {
         }
       }
 
-      const now = Date.now()
       const next = ports.map((port) => this.assembleRecord(port, now))
       events = diffSnapshots(this.store.list(), next)
       this.store.replaceAll(next)
+      // 需求 §10.1：只在四类 Diff 事件时写库；last_seen 以 60s 节流批量 UPDATE（方案 §5.14）
+      if (this.sessionStore !== undefined) {
+        this.sessionStore.applyDiffEvents(events, now)
+        if (now - this.lastTouchAt >= this.touchIntervalMs) {
+          this.lastTouchAt = now
+          this.sessionStore.batchTouch(next, now)
+        }
+      }
     } catch (cycleError) {
       error = cycleError instanceof Error ? cycleError.message : String(cycleError)
     }

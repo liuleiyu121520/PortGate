@@ -10,6 +10,7 @@ import type {
   PortListResult,
   PortRecord,
   PortRefreshResult,
+  PortSession,
   RevealTarget,
   SettingsSetResult,
   SettingsSnapshot,
@@ -34,7 +35,8 @@ export const PORTGATE_METHODS = {
   onPortEvents: IPC_CHANNELS.PORT_EVENTS,
   terminatePort: IPC_CHANNELS.PORT_TERMINATE,
   forceTerminatePort: IPC_CHANNELS.PORT_FORCE_TERMINATE,
-  revealRecord: IPC_CHANNELS.RECORD_REVEAL
+  revealRecord: IPC_CHANNELS.RECORD_REVEAL,
+  getPortHistory: IPC_CHANNELS.PORT_HISTORY
 } as const satisfies Record<keyof PortgateApi, IpcChannel>
 
 const WHITELIST_SET: ReadonlySet<string> = new Set<string>(IPC_CHANNEL_WHITELIST)
@@ -73,6 +75,8 @@ export function createPortgateApi(bridge: IpcBridge): PortgateApi {
     forceTerminatePort: (recordId: string) =>
       guardedInvoke(PORTGATE_METHODS.forceTerminatePort, recordId) as Promise<TerminateResult>,
     revealRecord: (recordId: string, target: RevealTarget) =>
-      guardedInvoke(PORTGATE_METHODS.revealRecord, { recordId, target }) as Promise<{ ok: boolean }>
+      guardedInvoke(PORTGATE_METHODS.revealRecord, { recordId, target }) as Promise<{ ok: boolean }>,
+    getPortHistory: (query = '') =>
+      guardedInvoke(PORTGATE_METHODS.getPortHistory, { query }) as Promise<PortSession[]>
   }
 }

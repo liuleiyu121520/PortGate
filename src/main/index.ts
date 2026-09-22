@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import { registerIpcHandlers } from './ipc/register'
 import type { PortgateServices } from './ipc/register'
-import { runSqliteSmoke } from './db/smoke'
+import { DB_FILE_NAME, openDatabase } from './db/connection'
 import { createAdapter } from './platform/factory'
 import { ProcessResolver } from './core/resolve/ProcessResolver'
 import { ApplicationResolver } from './core/resolve/ApplicationResolver'
@@ -12,7 +12,11 @@ import { SecurityClassifier } from './core/security/SecurityClassifier'
 import { KillPolicy } from './core/security/KillPolicy'
 import { PortManager } from './core/port/PortManager'
 import { PortScanner } from './core/port/PortScanner'
-import { runPhase2Probe, runPhase3Probe, runPhase4Probe } from './dev/probe'
+import { SessionStore } from './core/store/SessionStore'
+import { SettingsStore } from './core/store/SettingsStore'
+import { DEFAULT_SCAN_INTERVAL } from '../shared/constants'
+import { IPC_CHANNEL_WHITELIST } from '../shared/ipc-contract'
+import { runPhase2Probe, runPhase3Probe, runPhase4Probe, runPhase5Probe } from './dev/probe'
 import type { PortEvent } from '../shared/types'
 
 /** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验；不启动周期扫描，由探针手动驱动） */
@@ -34,6 +38,15 @@ function broadcastPortEvent(event: PortEvent): void {
   }
 }
 
+// ---- SQLite 持久化（阶段 5：D-1A 冒烟程序退役，connection.ts 接管；D-1 判据 B 见 tests/unit/sqlite-load.test.ts） ----
+const db = openDatabase(join(app.getPath('userData'), DB_FILE_NAME))
+const sessionStore = new SessionStore(db)
+const settingsStore = new SettingsStore(db, {
+  scanInterval: DEFAULT_SCAN_INTERVAL,
+  theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' // R-07：首次默认跟随系统
+})
+log(`[db] ${DB_FILE_NAME} opened (WAL, schema v1)；设置已从库恢复（scanInterval=${settingsStore.get().scanInterval} theme=${settingsStore.get().theme}）`)
+
 // ---- 扫描数据通路组装（方案 §10：PlatformAdapter → PortScanner → MemoryStore → Renderer） ----
 const adapter = createAdapter()
 const processResolver = new ProcessResolver()
@@ -41,18 +54,27 @@ const applicationResolver = new ApplicationResolver()
 const projectResolver = new ProjectResolver()
 const dockerResolver = new DockerResolver()
 const classifier = new SecurityClassifier()
-const portManager = new PortManager(adapter, processResolver, {
-  application: (record) => applicationResolver.resolve(processResolver.getTree(record.pid)),
-  project: (pid, cwd) => (cwd !== undefined ? projectResolver.resolve(pid, cwd) : undefined),
-  docker: (localAddress, localPort) => dockerResolver.match(localAddress, localPort),
-  classify: (input) => classifier.classify(input)
-})
+const portManager = new PortManager(
+  adapter,
+  processResolver,
+  {
+    application: (record) => applicationResolver.resolve(processResolver.getTree(record.pid)),
+    project: (pid, cwd) => (cwd !== undefined ? projectResolver.resolve(pid, cwd) : undefined),
+    docker: (localAddress, localPort) => dockerResolver.match(localAddress, localPort),
+    classify: (input) => classifier.classify(input)
+  },
+  { sessionStore }
+)
 const killPolicy = new KillPolicy({
   findRecord: (recordId) => portManager.findRecord(recordId),
   getProcess: (pid) => adapter.getProcess(pid),
   terminateProcess: (pid, force) => adapter.terminateProcess(pid, force),
   classifier,
-  onExitConfirmed: () => scanner.requestRefresh()
+  // AC-09/AC-12 联动：DONE 后写 closed_at（幂等，PORT_CLOSED 事件重复收口自动跳过）并触发即时重扫
+  onExitConfirmed: (recordId) => {
+    sessionStore.close(recordId, Date.now())
+    scanner.requestRefresh()
+  }
 })
 const scanner = new PortScanner(portManager, (result) => {
   if (result.error !== null) {
@@ -76,7 +98,12 @@ const services: PortgateServices = {
   requestRefresh: () => scanner.requestRefresh(),
   applyScanInterval: (intervalMs) => scanner.updateInterval(intervalMs),
   terminate: (recordId) => killPolicy.terminate(recordId),
-  forceTerminate: (recordId) => killPolicy.forceTerminate(recordId)
+  forceTerminate: (recordId) => killPolicy.forceTerminate(recordId),
+  getSettings: () => settingsStore.get(),
+  persistSettings: (patch) => {
+    settingsStore.update(patch)
+  },
+  history: (params) => sessionStore.queryHistory(params.query, params.limit)
 }
 
 function createWindow(): void {
@@ -192,21 +219,36 @@ async function verifyDevSmoke(): Promise<void> {
 
 app.whenReady().then(() => {
   registerIpcHandlers(services)
-  log('IPC 白名单通道注册完成（settings:get/set + port:list/detail/refresh/events）')
+  // 启动日志不变式（v1.4 MINOR-R5-001）：通道清单由 IPC_CHANNEL_WHITELIST 生成，
+  // 与白名单恒等，通道增减自动跟随（契约测试断言此生成方式）
+  log(`IPC 白名单通道注册完成（${IPC_CHANNEL_WHITELIST.join(' / ')}）`)
 
   if (isDev) {
-    // D-1 判据 A（方案 §11）：Electron 主进程内 better-sqlite3 真实读写 smoke
-    const smoke = runSqliteSmoke()
-    log(`[D-1A] better-sqlite3 Electron 侧读写 smoke：${smoke.ok ? 'PASS' : 'FAIL'} — ${smoke.detail}`)
+    log('dev mode：D-1A 冒烟已由 SQLite 连接接管（D-1 判据 B 见 tests/unit/sqlite-load.test.ts）')
   }
 
   createWindow()
 
   if (SMOKE_MODE) {
-    // 阶段 2/3/4 真机核对（M-01 + M-04 十项 + AC-05/09/10/11）：手动驱动扫描轮；完成后探针链收口退出
+    // 设置重启恢复验证（第二阶段：PORTGATE_SETTINGS_ONLY=1 只读设置即退出）
+    if (process.env.PORTGATE_SETTINGS_ONLY === '1') {
+      const restored = settingsStore.get()
+      const ok = restored.scanInterval === 5000 && restored.theme === 'dark'
+      log(`[SETTINGS_RESTORE] scanInterval=${restored.scanInterval} theme=${restored.theme} ok=${ok}`)
+      app.exit(ok ? 0 : 1)
+      return
+    }
+    // 阶段 2/3/4/5 真机核对 + 阶段 5 设置写入标记（重启恢复验证的第一阶段）
     void runPhase2Probe(portManager)
       .then(() => runPhase3Probe(portManager))
       .then(() => runPhase4Probe(portManager, killPolicy))
+      .then(() => runPhase5Probe(portManager, sessionStore, settingsStore, killPolicy))
+      .then(() => {
+        if (process.env.PORTGATE_SETTINGS_WRITE === '1') {
+          settingsStore.update({ scanInterval: 5000, theme: 'dark' })
+          log(`[SETTINGS_WRITE] scanInterval=5000 theme=dark written for restart-restore check`)
+        }
+      })
       .catch((error: unknown) => {
         log(`[SMOKE] probe chain aborted — ${error instanceof Error ? error.message : String(error)}`)
       })

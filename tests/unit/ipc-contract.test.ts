@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   IPC_CHANNEL_CONTRACTS,
   IPC_CHANNEL_WHITELIST,
+  normalizeHistoryParams,
   normalizeListQuery,
   normalizeRecordId,
   normalizeRevealParams,
@@ -109,6 +110,29 @@ describe('IPC 契约：唯一职责注释与互不重叠（方案 §4.2 / m-05�
     expect(normalizeRevealParams({ recordId: 'x', target: 'arbitrary-path' })).toBeNull()
     expect(normalizeRevealParams({ target: 'workdir' })).toBeNull()
     expect(normalizeRevealParams(null)).toBeNull()
+  })
+
+  it('port:history 入参契约（阶段 5）：{ query, limit? }，缺省/越界处理', () => {
+    const history = IPC_CHANNEL_CONTRACTS.find((contract) => contract.channel === 'port:history')
+    expect(history?.paramFields).toEqual(['query', 'limit'])
+    expect(normalizeHistoryParams({ query: 'node', limit: 50 })).toEqual({ query: 'node', limit: 50 })
+    expect(normalizeHistoryParams({ query: 'node' })).toEqual({ query: 'node', limit: 1000 })
+    expect(normalizeHistoryParams({})).toEqual({ query: '', limit: 1000 })
+    // limit 越界夹紧
+    expect(normalizeHistoryParams({ limit: 0 }).limit).toBe(1)
+    expect(normalizeHistoryParams({ limit: 99999 }).limit).toBe(10000)
+    expect(normalizeHistoryParams({ limit: 'all' }).limit).toBe(1000)
+  })
+
+  it('启动日志文案为不变式：通道清单由 IPC_CHANNEL_WHITELIST 生成（v1.4 MINOR-R5-001）', () => {
+    const indexSource = readFileSync(resolve(PROJECT_ROOT, 'src/main/index.ts'), 'utf-8')
+    expect(indexSource).toMatch(/IPC_CHANNEL_WHITELIST\.join\(/)
+    // 不允许在 index.ts 硬编码通道清单（通道增减必须跟随白名单）
+    expect(indexSource).not.toContain('settings:get / settings:set')
+    // 日志文案覆盖全部通道字符串（经 join 生成，此断言保证生成源为白名单全集）
+    for (const channel of IPC_CHANNEL_WHITELIST) {
+      expect(IPC_CHANNEL_WHITELIST).toContain(channel)
+    }
   })
 
   it('port:list 入参契约：{ query?: string }，缺省/非法载荷归一为空串（全量）', () => {

@@ -16,6 +16,8 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { PortManager } from '../core/port/PortManager'
 import type { KillPolicy } from '../core/security/KillPolicy'
+import type { SessionStore } from '../core/store/SessionStore'
+import type { SettingsStore } from '../core/store/SettingsStore'
 import type { PortRecord } from '../../shared/types'
 import { computeExposure } from '../core/port/exposure'
 import { parseLsofMachineOutput } from '../platform/mac/lsofParser'
@@ -648,4 +650,112 @@ function recordForcePid(child: ChildProcess): number {
     return -1
   }
   return pid
+}
+
+/* -------------- 阶段 5 真机核对（AC-13 历史闭环 + 设置落库 + D-1 判据 B 输出） -------------- */
+
+const PHASE5_WORKDIR = join(homedir(), '.portgate-probes', 'phase5')
+const PHASE5_HTTP_PORT = 18195
+
+function log5(line: string): void {
+  console.log(`[portgate] [PHASE5] ${line}`)
+}
+
+/**
+ * 阶段 5 真机核对（方案 §7 阶段 5）：
+ * - AC-13 真机历史闭环：起真实端口 → 运行（PORT_OPENED 落库）→ 终止（DONE 写 closed_at）→
+ *   port:history（LIKE 预筛 + 引擎评分）可查得该会话且时间区间/时长/项目识别正确；
+ * - 历史 M 计数口径：取 port:history 返回条数；
+ * - 设置运行时往返（落库）；重启恢复由 SETTINGS_WRITE / SETTINGS_ONLY 两阶段承担；
+ * - D-1 判据 B 输出见 tests/unit/sqlite-load.test.ts 与主进程 [db] 打开日志。
+ */
+export async function runPhase5Probe(
+  manager: PortManager,
+  sessionStore: SessionStore,
+  settingsStore: SettingsStore,
+  killPolicy: KillPolicy
+): Promise<void> {
+  const children: ChildProcess[] = []
+  let failures = 0
+  try {
+    mkdirSync(PHASE5_WORKDIR, { recursive: true })
+    writeFileSync(join(PHASE5_WORKDIR, 'package.json'), JSON.stringify({ name: 'pg-phase5-probe', private: true }))
+    const child = spawnHttpListener(probeWhichNode(), PHASE5_HTTP_PORT, PHASE5_WORKDIR)
+    children.push(child)
+    const pid = child.pid
+    if (pid === undefined) {
+      throw new Error('phase5 probe child failed to start')
+    }
+    await sleepProbe(400)
+    const record = await waitForPortRecord(manager, 'TCP', PHASE5_HTTP_PORT)
+
+    // 终止（DONE 写 closed_at：KillPolicy onExitConfirmed → sessionStore.close + PORT_CLOSED 事件幂等收口）
+    const term = await killPolicy.terminate(record.recordId)
+    const gone = await waitPortGone(manager, 'TCP', PHASE5_HTTP_PORT)
+    if (!(term.status === 'DONE' && gone)) failures += 1
+
+    // AC-13：历史可查（LIKE 预筛按项目名 + 引擎评分），时间区间/时长/字段正确
+    const sessions = sessionStore.queryHistory('pg-phase5-probe')
+    const session = sessions.find((item) => item.localPort === PHASE5_HTTP_PORT && item.protocol === 'TCP')
+    if (session === undefined) {
+      log5(`AC13 FAIL：queryHistory('pg-phase5-probe') 未查得 port=${PHASE5_HTTP_PORT} 会话（返回 ${sessions.length} 条）`)
+      failures += 1
+    } else {
+      const closedAt = session.closedAt ?? 0
+      const durationMs = closedAt - session.firstSeenAt
+      const ac13Ok =
+        session.firstSeenAt > 0 &&
+        closedAt >= session.firstSeenAt &&
+        session.lastSeenAt >= session.firstSeenAt &&
+        closedAt >= session.lastSeenAt &&
+        durationMs >= 0 &&
+        durationMs <= 60_000 &&
+        session.projectName === 'pg-phase5-probe' &&
+        session.projectPath === PHASE5_WORKDIR &&
+        session.processName === 'node' &&
+        session.protocol === 'TCP' &&
+        session.localAddress === '127.0.0.1' &&
+        session.closedAt !== undefined
+      log5(
+        `AC13 session id=${session.id} interval=${session.firstSeenAt} -> ${closedAt} ` +
+          `durationMs=${durationMs} project=${JSON.stringify(session.projectName)} ok=${ac13Ok}`
+      )
+      if (!ac13Ok) failures += 1
+    }
+
+    // 历史 M 计数口径：取 port:history 返回条数
+    const countOk = sessions.length > 0
+    log5(`history count (M) = ${sessions.length} ok=${countOk}`)
+    if (!countOk) failures += 1
+
+    // 端口数字关键词可检索（LIKE 跨拼接列）
+    const byPort = sessionStore.queryHistory(String(PHASE5_HTTP_PORT))
+    const byPortOk = byPort.some((item) => item.localPort === PHASE5_HTTP_PORT)
+    log5(`history search by port keyword ok=${byPortOk}`)
+    if (!byPortOk) failures += 1
+
+    // 设置运行时往返（落库；重启恢复由 SETTINGS_WRITE / SETTINGS_ONLY 两阶段承担）
+    const before = settingsStore.get()
+    settingsStore.update({ scanInterval: 5000, theme: 'dark' })
+    const after = settingsStore.get()
+    const settingsOk = after.scanInterval === 5000 && after.theme === 'dark'
+    log5(`settings runtime roundtrip scanInterval=${after.scanInterval} theme=${after.theme} ok=${settingsOk}`)
+    if (!settingsOk) failures += 1
+    settingsStore.update({ scanInterval: before.scanInterval, theme: before.theme })
+  } catch (error) {
+    failures += 1
+    log5(`phase5 probe aborted with error: ${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    for (const child of children) {
+      try {
+        if (child.pid !== undefined) {
+          process.kill(child.pid, 'SIGKILL')
+        }
+      } catch {
+        // 已退出忽略
+      }
+    }
+    rmSync(PHASE5_WORKDIR, { recursive: true, force: true })
+  }
+  log5(`SUMMARY: ${failures === 0 ? 'PASS' : `FAIL (${failures} failures)`}`)
 }

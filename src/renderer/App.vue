@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { theme as antdTheme } from 'ant-design-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import DetailDrawer from './components/DetailDrawer.vue'
@@ -10,8 +10,8 @@ import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
 import { useTerminate } from './composables/terminate'
 import { THEME_PALETTES } from './theme'
-import type { HighlightRange, PortRecord } from '../shared/types'
-import { formatDuration } from './utils/format'
+import type { HighlightRange, PortRecord, PortSession } from '../shared/types'
+import { formatClock, formatDuration } from './utils/format'
 
 const settingsStore = useSettingsStore()
 const portsStore = usePortsStore()
@@ -45,6 +45,45 @@ const statsItems = computed(() => [
 
 const activeTab = ref<'current' | 'history'>('current')
 const currentCount = computed(() => portsStore.records.length)
+
+// 历史 Tab：激活或搜索词变化时经 port:history 重拉（M 计数 = 返回条数）
+watch(activeTab, (tab) => {
+  if (tab === 'history') {
+    void portsStore.loadHistory()
+  }
+})
+
+function handleSearch(query: string): void {
+  portsStore.setQuery(query)
+  if (activeTab.value === 'history') {
+    void portsStore.loadHistory()
+  }
+}
+
+interface HistoryColumn {
+  title: string
+  key: string
+  width?: number
+}
+
+// 历史行展示（需求 §11）：端口/进程/项目/时间区间/时长（如 17:30 - 18:42 · 1h12m）
+const historyColumns: HistoryColumn[] = [
+  { title: 'PORT', key: 'port', width: 150 },
+  { title: 'PROCESS', key: 'process', width: 170 },
+  { title: 'PROJECT', key: 'project', width: 150 },
+  { title: 'INTERVAL', key: 'interval' },
+  { title: 'DURATION', key: 'duration', width: 110 }
+]
+
+function sessionInterval(session: PortSession): string {
+  const end = session.closedAt ?? session.lastSeenAt
+  return `${formatClock(session.firstSeenAt)} - ${formatClock(end)}`
+}
+
+function sessionDuration(session: PortSession): string {
+  const end = session.closedAt ?? session.lastSeenAt
+  return formatDuration(end - session.firstSeenAt)
+}
 
 interface TableColumn {
   title: string
@@ -131,7 +170,7 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
         <ThemeToggle />
       </header>
 
-      <SearchBar @search="portsStore.setQuery" />
+      <SearchBar @search="handleSearch" />
 
       <div class="pg-stats">
         <span
@@ -252,9 +291,41 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
           </a-tab-pane>
           <a-tab-pane
             key="history"
-            :tab="`历史 (0)`"
+            :tab="`历史 (${portsStore.historyCount})`"
           >
-            <a-empty description="暂无历史会话（阶段 5 接入）" />
+            <a-table
+              :columns="historyColumns"
+              :data-source="portsStore.historySessions"
+              :pagination="{ pageSize: 50, hideOnSinglePage: true }"
+              row-key="id"
+              size="middle"
+              class="pg-table"
+            >
+              <template #bodyCell="{ column, record: session }">
+                <template v-if="column.key === 'port'">
+                  <a-tag
+                    class="pg-proto-tag"
+                    :class="session.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
+                  >
+                    {{ session.protocol }}
+                  </a-tag>
+                  <span class="pg-port-number">{{ session.localPort }}</span>
+                </template>
+                <template v-else-if="column.key === 'process'">
+                  <span>{{ session.processName }}</span>
+                  <span class="pg-process-pid"> · {{ session.pid }}</span>
+                </template>
+                <template v-else-if="column.key === 'project'">
+                  <span>{{ session.projectName ?? '—' }}</span>
+                </template>
+                <template v-else-if="column.key === 'interval'">
+                  <span>{{ sessionInterval(session) }}</span>
+                </template>
+                <template v-else-if="column.key === 'duration'">
+                  <span>{{ sessionDuration(session) }}</span>
+                </template>
+              </template>
+            </a-table>
           </a-tab-pane>
         </a-tabs>
       </div>

@@ -10,6 +10,7 @@ import type {
   PortEvent,
   PortRecord,
   PortRefreshResult,
+  PortSession,
   RevealTarget,
   ScanInterval,
   SettingsSetResult,
@@ -38,7 +39,9 @@ export const IPC_CHANNELS = {
   /** 唯一职责：按 recordId 对 SIGTERM 未响应进程强制终止（重新全量校验后 SIGKILL），返回状态机终态；不接受 PID */
   PORT_FORCE_TERMINATE: 'port:forceTerminate',
   /** 唯一职责：按 recordId 打开其工作目录或项目目录（main 校验路径归属后 shell.openPath），不接受任意路径 */
-  RECORD_REVEAL: 'record:reveal'
+  RECORD_REVEAL: 'record:reveal',
+  /** 唯一职责：检索已收口历史会话（SQL LIKE 预筛 + 引擎评分），返回 PortSession[] 不含命中区间（v1.4） */
+  PORT_HISTORY: 'port:history'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -53,7 +56,8 @@ export const IPC_CHANNEL_WHITELIST: readonly IpcChannel[] = [
   IPC_CHANNELS.PORT_EVENTS,
   IPC_CHANNELS.PORT_TERMINATE,
   IPC_CHANNELS.PORT_FORCE_TERMINATE,
-  IPC_CHANNELS.RECORD_REVEAL
+  IPC_CHANNELS.RECORD_REVEAL,
+  IPC_CHANNELS.PORT_HISTORY
 ]
 
 /** 单个 channel 的契约元数据（契约测试据此断言职责唯一与入参消费） */
@@ -122,6 +126,12 @@ export const IPC_CHANNEL_CONTRACTS: readonly IpcChannelContract[] = [
     direction: 'R',
     responsibility: '按 recordId 打开其工作目录或项目目录（校验路径归属后 openPath），不接受任意路径',
     paramFields: ['recordId', 'target']
+  },
+  {
+    channel: IPC_CHANNELS.PORT_HISTORY,
+    direction: 'R',
+    responsibility: '检索已收口历史会话（LIKE 预筛+引擎评分排序），返回 PortSession[]，不含命中区间（v1.4）',
+    paramFields: ['query', 'limit']
   }
 ]
 
@@ -206,6 +216,28 @@ export function normalizeRevealParams(raw: unknown): { recordId: string; target:
   return { recordId, target }
 }
 
+/** port:history 入参（方案 §4.2：{ query, limit? }） */
+export interface HistoryQueryParams {
+  query: string
+  limit: number
+}
+
+/** 校验 port:history 入参（宽松：缺省 query=''、limit=1000；limit 夹紧到 1..10000） */
+export function normalizeHistoryParams(raw: unknown): HistoryQueryParams {
+  let query = ''
+  let limit = 1000
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
+    const candidate = raw as Record<string, unknown>
+    if (typeof candidate.query === 'string') {
+      query = candidate.query
+    }
+    if (typeof candidate.limit === 'number' && Number.isFinite(candidate.limit)) {
+      limit = Math.min(Math.max(Math.floor(candidate.limit), 1), 10000)
+    }
+  }
+  return { query, limit }
+}
+
 /** window.portgate 暴露的桥 API（preload 实现，renderer 仅经此访问；与白名单一一对应） */
 export interface PortgateApi {
   getSettings(): Promise<SettingsSnapshot>
@@ -222,4 +254,6 @@ export interface PortgateApi {
   forceTerminatePort(recordId: string): Promise<TerminateResult>
   /** 打开记录的工作目录/项目目录（main 校验路径归属） */
   revealRecord(recordId: string, target: RevealTarget): Promise<{ ok: boolean }>
+  /** 历史会话检索（LIKE 预筛 + 引擎评分；仅已收口会话，v1.4 不含命中区间） */
+  getPortHistory(query?: string): Promise<PortSession[]>
 }

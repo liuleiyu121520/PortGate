@@ -27,3 +27,9 @@
 ### [2026-09-23 03:33] feat(security): 实现 Resolver 链与安全 Kill 闭环（阶段4）
 
 - 新增识别域（src/main/core/resolve：应用/项目/容器）与安全域（src/main/core/security：分类器/终止状态机），IPC 白名单扩至 9 通道
+
+## 待确认更新
+
+### [2026-09-23 04:07] feat(storage): 实现 SQLite 持久化、历史会话与设置存储（阶段5）
+
+- 新增持久化域（src/main/db + core/store：SessionStore/SettingsStore），IPC 白名单扩至 10 通道（port:history 历史检索）

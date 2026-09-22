@@ -17,8 +17,8 @@ import { IPC_CHANNELS, IPC_CHANNEL_WHITELIST } from '../../src/shared/ipc-contra
 // vitest 以项目根为工作目录运行（npm test 从 package.json 所在目录启动）
 const PROJECT_ROOT = process.cwd()
 
-/** 阶段 4 白名单（方案 §4.2：阶段 4 应有通道全部就位；未到阶段通道严禁占位，m-01） */
-const PHASE4_EXPECTED_CHANNELS: readonly string[] = [
+/** 阶段 5 白名单（方案 §4.2：port:history 第 10 通道就位；未到阶段通道严禁占位，m-01） */
+const PHASE5_EXPECTED_CHANNELS: readonly string[] = [
   'settings:get',
   'settings:set',
   'port:list',
@@ -27,11 +27,12 @@ const PHASE4_EXPECTED_CHANNELS: readonly string[] = [
   'port:events',
   'port:terminate',
   'port:forceTerminate',
-  'record:reveal'
+  'record:reveal',
+  'port:history'
 ]
 
-/** 未到阶段的通道（阶段 5 port:history）与被红线禁止的形态（kill(pid)，需求 §15） */
-const FORBIDDEN_CHANNELS: readonly string[] = ['port:ping', 'port:history', 'port:kill', 'port:killByPid']
+/** 被红线禁止的通道形态（kill(pid)，需求 §15）与方案明确不做项 */
+const FORBIDDEN_CHANNELS: readonly string[] = ['port:ping', 'port:kill', 'port:killByPid']
 
 describe('IPC 白名单恒等断言（方案 §4.3 / m-01）', () => {
   it('IPC_CHANNELS 导出的 channel 集合与白名单常量恒等', () => {
@@ -40,8 +41,9 @@ describe('IPC 白名单恒等断言（方案 §4.3 / m-01）', () => {
     expect([...channelValues].sort()).toEqual([...IPC_CHANNEL_WHITELIST].sort())
   })
 
-  it('阶段 4 白名单恒等于方案 §4.2 应有通道，无占位且无 kill(pid) 形态通道', () => {
-    expect([...IPC_CHANNEL_WHITELIST].sort()).toEqual([...PHASE4_EXPECTED_CHANNELS].sort())
+  it('阶段 5 白名单恒等于方案 §4.2 全部 10 通道，无占位且无 kill(pid) 形态通道', () => {
+    expect([...IPC_CHANNEL_WHITELIST].sort()).toEqual([...PHASE5_EXPECTED_CHANNELS].sort())
+    expect(IPC_CHANNEL_WHITELIST).toHaveLength(10)
     for (const forbidden of FORBIDDEN_CHANNELS) {
       expect(IPC_CHANNEL_WHITELIST).not.toContain(forbidden)
     }
@@ -75,6 +77,7 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
     expect([...methods].sort()).toEqual([
       'forceTerminatePort',
       'getPortDetail',
+      'getPortHistory',
       'getPortList',
       'getSettings',
       'onPortEvents',
@@ -97,7 +100,8 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
           ok: true,
           records: [],
           stats: { total: 0, tcp: 0, udp: 0, exposed: 0 },
-          status: 'DONE'
+          status: 'DONE',
+          sessions: []
         }
       },
       subscribe: (channel, _listener) => {
@@ -114,6 +118,7 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
     await api.terminatePort('TCP:127.0.0.1:5173:100')
     await api.forceTerminatePort('TCP:127.0.0.1:5173:100')
     await api.revealRecord('TCP:127.0.0.1:5173:100', 'project')
+    await api.getPortHistory('node')
     const unsubscribe = api.onPortEvents(() => undefined)
     expect(typeof unsubscribe).toBe('function')
     expect(invoked).toEqual([
@@ -124,7 +129,8 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
       IPC_CHANNELS.PORT_REFRESH,
       IPC_CHANNELS.PORT_TERMINATE,
       IPC_CHANNELS.PORT_FORCE_TERMINATE,
-      IPC_CHANNELS.RECORD_REVEAL
+      IPC_CHANNELS.RECORD_REVEAL,
+      IPC_CHANNELS.PORT_HISTORY
     ])
     expect(subscribed).toEqual([IPC_CHANNELS.PORT_EVENTS])
     for (const channel of [...invoked, ...subscribed]) {

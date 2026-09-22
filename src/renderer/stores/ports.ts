@@ -8,7 +8,7 @@
  * - SCAN_ERROR 置错误态，成功事件（SNAPSHOT/DIFF/重拉）清除。
  */
 import { defineStore } from 'pinia'
-import type { DiffEvent, PortEvent, PortListResult, PortRecord, PortStats, SearchMatchInfo } from '../../shared/types'
+import type { DiffEvent, PortEvent, PortListResult, PortRecord, PortSession, PortStats, SearchMatchInfo } from '../../shared/types'
 
 interface PortsState {
   records: PortRecord[]
@@ -17,6 +17,9 @@ interface PortsState {
   query: string
   scanError: string | null
   ready: boolean
+  /** 历史会话（历史 Tab 激活/搜索时拉取；M 计数取 port:history 返回条数） */
+  historySessions: PortSession[]
+  historyCount: number
 }
 
 const QUERY_DEBOUNCE_MS = 250
@@ -66,7 +69,9 @@ export const usePortsStore = defineStore('ports', {
     matches: {},
     query: '',
     scanError: null,
-    ready: false
+    ready: false,
+    historySessions: [],
+    historyCount: 0
   }),
   actions: {
     /** 首载：拉全量快照 + 订阅推送（幂等；重复调用先退订旧订阅） */
@@ -93,6 +98,12 @@ export const usePortsStore = defineStore('ports', {
         queryTimer = null
         void this.reloadForQuery()
       }, QUERY_DEBOUNCE_MS)
+    },
+    /** 历史检索（port:history：LIKE 预筛 + 引擎评分；仅已收口会话，不含命中区间） */
+    async loadHistory(): Promise<void> {
+      const sessions = await window.portgate.getPortHistory(this.query)
+      this.historySessions = sessions
+      this.historyCount = sessions.length
     },
     /** 按当前 query 重拉 port:list（主进程负责过滤/排序/命中区间） */
     async reloadForQuery(): Promise<void> {

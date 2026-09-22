@@ -203,3 +203,36 @@ export interface TerminateResult {
 
 /** record:reveal 目标（方案 §4.2：'workdir' | 'project'） */
 export type RevealTarget = 'workdir' | 'project'
+
+/* --------------------------- 历史会话（需求 §10.2 / §11，AC-12/13） --------------------------- */
+
+/** 历史端口会话（列映射需求 §10.2 port_session；v1.4：port:history 出参不含命中区间） */
+export interface PortSession {
+  /** 会话主键（DDL：id TEXT PRIMARY KEY；取记录身份 recordId） */
+  id: string
+  protocol: 'TCP' | 'UDP'
+  localAddress: string
+  localPort: number
+  remoteAddress?: string
+  remotePort?: number
+  state?: string
+  pid: number
+  ppid?: number
+  processName: string
+  executablePath?: string
+  commandLine?: string
+  workingDirectory?: string
+  userName?: string
+  applicationName?: string
+  applicationPath?: string
+  projectName?: string
+  projectPath?: string
+  containerName?: string
+  dockerImage?: string
+  protectionLevel?: SecurityLevel
+  processStartedAt?: number
+  firstSeenAt: number
+  lastSeenAt: number
+  /** 会话收口时刻（进行中的当前会话为空；历史查询仅返回已收口会话） */
+  closedAt?: number
+}

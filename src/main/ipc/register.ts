@@ -1,14 +1,13 @@
 /**
  * IPC 白名单唯一注册点（方案 §3.3 / §4.2）。
- * 阶段 2 通道：settings:get/set + port:list/detail/refresh（invoke）+ port:events（P 推送，
- * 由 main 组装层经 services.broadcast 发送）。port:terminate/forceTerminate/record:reveal
- * 属阶段 4、port:history 属阶段 5，未到阶段严禁挂载（m-01）。
- * 设置暂存主进程内存（阶段 5 迁移 SettingsStore 落库）；扫描周期变更实时回调组装层。
+ * 阶段 5 通道：settings:get/set（经 SettingsStore 落库）+ port:list/detail/refresh
+ * （invoke）+ port:events（P 推送）+ port:terminate/forceTerminate + record:reveal +
+ * port:history（第 10 通道）。设置状态由组装层的 SettingsStore 提供（落库 + 重启恢复）。
  */
-import { ipcMain, nativeTheme, shell } from 'electron'
-import { DEFAULT_SCAN_INTERVAL } from '../../shared/constants'
+import { ipcMain, shell } from 'electron'
 import {
   IPC_CHANNELS,
+  normalizeHistoryParams,
   normalizeListQuery,
   normalizeRecordId,
   normalizeRevealParams,
@@ -16,6 +15,7 @@ import {
 } from '../../shared/ipc-contract'
 import type {
   PortRefreshResult,
+  PortSession,
   SettingsSetResult,
   SettingsSnapshot,
   TerminateResult
@@ -42,28 +42,26 @@ export interface PortgateServices {
   terminate: (recordId: string) => Promise<TerminateResult>
   /** 强制终止（重新校验后 SIGKILL） */
   forceTerminate: (recordId: string) => Promise<TerminateResult>
-}
-
-const settings: SettingsSnapshot = {
-  scanInterval: DEFAULT_SCAN_INTERVAL,
-  theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  /** 当前设置快照（SettingsStore：SQLite 落库 + 重启恢复） */
+  getSettings: () => SettingsSnapshot
+  /** settings:set 契约校验通过后持久化补丁（内存快照 + app_settings 落库） */
+  persistSettings: (patch: { scanInterval?: 1000 | 2000 | 5000; theme?: 'light' | 'dark' }) => void
+  /** 历史会话检索（LIKE 预筛 + 引擎评分；仅已收口会话） */
+  history: (params: { query: string; limit: number }) => PortSession[]
 }
 
 /** 注册白名单内全部 IPC handler；应用生命周期内仅调用一次 */
 export function registerIpcHandlers(services: PortgateServices): void {
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsSnapshot => ({ ...settings }))
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsSnapshot => services.getSettings())
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_event, raw: unknown): SettingsSetResult => {
     const result = normalizeSettingsUpdate(raw)
     if (!result.ok) {
       return { ok: false }
     }
+    services.persistSettings(result.value)
     if (result.value.scanInterval !== undefined) {
-      settings.scanInterval = result.value.scanInterval
       services.applyScanInterval(result.value.scanInterval)
-    }
-    if (result.value.theme !== undefined) {
-      settings.theme = result.value.theme
     }
     return { ok: true }
   })
@@ -120,4 +118,9 @@ export function registerIpcHandlers(services: PortgateServices): void {
     await shell.openPath(targetPath)
     return { ok: true }
   })
+
+  // 历史会话检索（阶段 5：LIKE 预筛 + 引擎评分；仅已收口会话，出参不含命中区间）
+  ipcMain.handle(IPC_CHANNELS.PORT_HISTORY, (_event, raw: unknown): PortSession[] =>
+    services.history(normalizeHistoryParams(raw))
+  )
 }
