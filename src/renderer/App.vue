@@ -18,6 +18,12 @@ const portsStore = usePortsStore()
 // 安全终止交互（确认框/PENDING_FORCE 强制二次确认/拒绝文案映射；终止后主进程触发即时重扫局部刷新）
 const { confirmTerminate } = useTerminate()
 
+// R-01 平台降级提示（阶段 6）：非 macOS 平台显示适配中横幅。
+// renderer 侧禁止触碰平台标识全局变量（AC-16 红线），以 navigator.userAgent 判定（合法 Web API）。
+const isNonMacPlatform = computed(
+  () => !/Macintosh|Mac OS X|MacOS/i.test(navigator.userAgent)
+)
+
 const palette = computed(() => THEME_PALETTES[settingsStore.theme])
 
 // antd 经 ConfigProvider 切换算法 + token（映射同一色板源，方案 §6）
@@ -169,6 +175,15 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
         </div>
         <ThemeToggle />
       </header>
+
+      <a-alert
+        v-if="isNonMacPlatform"
+        type="warning"
+        show-icon
+        class="pg-platform-banner"
+        message="当前平台适配开发中"
+        description="Windows / Linux Adapter 的完整功能将在后续版本提供（R-01：界面与历史可浏览，扫描与安全终止暂不可用）。"
+      />
 
       <SearchBar @search="handleSearch" />
 
@@ -388,6 +403,10 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
   &__dot--error {
     background-color: var(--pg-danger);
   }
+}
+
+.pg-platform-banner {
+  margin-bottom: 10px;
 }
 
 .pg-stats {

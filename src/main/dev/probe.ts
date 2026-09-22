@@ -559,11 +559,17 @@ export async function runPhase4Probe(manager: PortManager, killPolicy: KillPolic
     log4(`AC04-9 Project name=${JSON.stringify(record.project?.name)} type=${record.project?.type} marker=${record.project?.marker} ok=${projectOk}`)
     if (!projectOk) failures += 1
 
+    // 宿主应用名随运行环境不同（dev=Electron.app / packaged=PortGate.app），
+    // 两条路径均验证同一实树识别链路；packaged 下 bundleId 应为本应用 com.portgate.app
+    const expectedHostNames = ['Electron', 'PortGate']
+    const expectedBundleIds = ['com.github.Electron', 'com.portgate.app']
     const applicationOk =
       record.application !== undefined &&
-      record.application.name === 'Electron' &&
-      (record.application.path ?? '').endsWith('.app') &&
-      record.application.sourcePid !== undefined
+      expectedHostNames.includes(record.application.name) &&
+      (record.application.path ?? '').includes('.app') &&
+      record.application.sourcePid !== undefined &&
+      (record.application.bundleId === undefined ||
+        expectedBundleIds.includes(record.application.bundleId))
     log4(
       `AC04-10 Application name=${JSON.stringify(record.application?.name)} path=${JSON.stringify(record.application?.path)} ` +
         `bundleId=${JSON.stringify(record.application?.bundleId)} ok=${applicationOk}（AC-05 实树：node 的宿主应用经真实进程树识别）`

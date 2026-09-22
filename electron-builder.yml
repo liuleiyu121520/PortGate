@@ -1,4 +1,6 @@
-# electron-builder 基础配置（阶段 1 就位，本阶段不出包；打包/CI 主体在阶段 6）
+# electron-builder 完整配置（阶段 6 / m-07 未签名口径）
+# better-sqlite3@13 为包内 N-API 通用预编译二进制（方案 §3.4）：无 rebuild 环节，
+# 仅需保证 .node / prebuilds 在 asar 外可被 require。
 appId: com.portgate.app
 productName: PortGate
 directories:
@@ -7,8 +9,6 @@ directories:
 files:
   - out/**
   - package.json
-# better-sqlite3@13 为包内 N-API 通用预编译二进制（方案 §3.4）：无 rebuild 环节，
-# 仅需保证 .node / prebuilds 在 asar 外可被 require。
 npmRebuild: false
 asarUnpack:
   - "**/*.node"
@@ -20,10 +20,18 @@ mac:
       arch:
         - arm64
         - x64
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  # m-07：固定未签名口径——有/无证书机器状态均不被自动签名（R-7/R-8，V1 不签名不公证）
+  identity: null
+  # 本地/CI 侧再辅以 CSC_IDENTITY_AUTO_DISCOVERY=false（CI workflow 与 README 打包命令）
 win:
   target:
     - nsis
+  icon: build/icon.png
 linux:
   target:
     - AppImage
     - deb
+  category: Development
+  icon: build/icon.png

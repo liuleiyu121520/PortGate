@@ -33,3 +33,9 @@
 ### [2026-09-23 04:07] feat(storage): 实现 SQLite 持久化、历史会话与设置存储（阶段5）
 
 - 新增持久化域（src/main/db + core/store：SessionStore/SettingsStore），IPC 白名单扩至 10 通道（port:history 历史检索）
+
+## 待确认更新
+
+### [2026-09-23 04:30] feat(build): 完成打包配置、三平台 CI 与主题走查（阶段6）
+
+- 新增 CI 工作流与四平台打包配置；非 macOS 平台显示降级横幅（V1.2 完整适配）

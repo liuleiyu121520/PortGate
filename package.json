@@ -5,7 +5,8 @@
   "main": "out/main/index.js",
   "private": true,
   "author": {
-    "name": "PortGate"
+    "name": "PortGate",
+    "email": "portgate@app.example.com"
   },
   "license": "MIT",
   "scripts": {
