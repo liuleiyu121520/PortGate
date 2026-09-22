@@ -17,24 +17,21 @@ import { IPC_CHANNELS, IPC_CHANNEL_WHITELIST } from '../../src/shared/ipc-contra
 // vitest 以项目根为工作目录运行（npm test 从 package.json 所在目录启动）
 const PROJECT_ROOT = process.cwd()
 
-/** 阶段 2 白名单（方案 §4.2：阶段 2 应有通道；未到阶段通道严禁占位，m-01） */
-const PHASE2_EXPECTED_CHANNELS: readonly string[] = [
+/** 阶段 4 白名单（方案 §4.2：阶段 4 应有通道全部就位；未到阶段通道严禁占位，m-01） */
+const PHASE4_EXPECTED_CHANNELS: readonly string[] = [
   'settings:get',
   'settings:set',
   'port:list',
   'port:detail',
   'port:refresh',
-  'port:events'
-]
-
-/** 未到阶段的通道（阶段 4/5），白名单不得提前包含 */
-const FUTURE_CHANNELS: readonly string[] = [
-  'port:ping',
-  'port:history',
+  'port:events',
   'port:terminate',
   'port:forceTerminate',
   'record:reveal'
 ]
+
+/** 未到阶段的通道（阶段 5 port:history）与被红线禁止的形态（kill(pid)，需求 §15） */
+const FORBIDDEN_CHANNELS: readonly string[] = ['port:ping', 'port:history', 'port:kill', 'port:killByPid']
 
 describe('IPC 白名单恒等断言（方案 §4.3 / m-01）', () => {
   it('IPC_CHANNELS 导出的 channel 集合与白名单常量恒等', () => {
@@ -43,10 +40,10 @@ describe('IPC 白名单恒等断言（方案 §4.3 / m-01）', () => {
     expect([...channelValues].sort()).toEqual([...IPC_CHANNEL_WHITELIST].sort())
   })
 
-  it('阶段 2 白名单恒等于方案 §4.2 应有通道，无占位且无未到阶段通道', () => {
-    expect([...IPC_CHANNEL_WHITELIST].sort()).toEqual([...PHASE2_EXPECTED_CHANNELS].sort())
-    for (const future of FUTURE_CHANNELS) {
-      expect(IPC_CHANNEL_WHITELIST).not.toContain(future)
+  it('阶段 4 白名单恒等于方案 §4.2 应有通道，无占位且无 kill(pid) 形态通道', () => {
+    expect([...IPC_CHANNEL_WHITELIST].sort()).toEqual([...PHASE4_EXPECTED_CHANNELS].sort())
+    for (const forbidden of FORBIDDEN_CHANNELS) {
+      expect(IPC_CHANNEL_WHITELIST).not.toContain(forbidden)
     }
   })
 })
@@ -76,12 +73,15 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
     const methods = Object.keys(PORTGATE_METHODS)
     const routedChannels = Object.values(PORTGATE_METHODS)
     expect([...methods].sort()).toEqual([
+      'forceTerminatePort',
       'getPortDetail',
       'getPortList',
       'getSettings',
       'onPortEvents',
       'refreshPorts',
-      'setSettings'
+      'revealRecord',
+      'setSettings',
+      'terminatePort'
     ])
     expect(new Set(routedChannels).size).toBe(methods.length)
     expect([...routedChannels].sort()).toEqual([...IPC_CHANNEL_WHITELIST].sort())
@@ -93,7 +93,12 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
     const bridge: IpcBridge = {
       invoke: async (channel) => {
         invoked.push(channel)
-        return { ok: true, records: [], stats: { total: 0, tcp: 0, udp: 0, exposed: 0 } }
+        return {
+          ok: true,
+          records: [],
+          stats: { total: 0, tcp: 0, udp: 0, exposed: 0 },
+          status: 'DONE'
+        }
       },
       subscribe: (channel, _listener) => {
         subscribed.push(channel)
@@ -106,6 +111,9 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
     await api.getPortList()
     await api.getPortDetail('TCP:127.0.0.1:5173:100')
     await api.refreshPorts()
+    await api.terminatePort('TCP:127.0.0.1:5173:100')
+    await api.forceTerminatePort('TCP:127.0.0.1:5173:100')
+    await api.revealRecord('TCP:127.0.0.1:5173:100', 'project')
     const unsubscribe = api.onPortEvents(() => undefined)
     expect(typeof unsubscribe).toBe('function')
     expect(invoked).toEqual([
@@ -113,7 +121,10 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
       IPC_CHANNELS.SETTINGS_SET,
       IPC_CHANNELS.PORT_LIST,
       IPC_CHANNELS.PORT_DETAIL,
-      IPC_CHANNELS.PORT_REFRESH
+      IPC_CHANNELS.PORT_REFRESH,
+      IPC_CHANNELS.PORT_TERMINATE,
+      IPC_CHANNELS.PORT_FORCE_TERMINATE,
+      IPC_CHANNELS.RECORD_REVEAL
     ])
     expect(subscribed).toEqual([IPC_CHANNELS.PORT_EVENTS])
     for (const channel of [...invoked, ...subscribed]) {
@@ -126,8 +137,9 @@ describe('preload 安全边界（方案 §4.3 静态断言）', () => {
       invoke: async () => ({ ok: true }),
       subscribe: () => () => undefined
     })
-    // PortgateApi 只暴露白名单方法；越权通道无法经 api 触达 invoker
-    expect(Object.values(PORTGATE_METHODS)).not.toContain('port:terminate')
+    // PortgateApi 只暴露白名单方法；越权通道（含 kill(pid) 形态）无法经 api 触达 invoker
+    expect(Object.values(PORTGATE_METHODS)).not.toContain('port:kill')
+    expect(Object.values(PORTGATE_METHODS)).not.toContain('port:killByPid')
     expect(() =>
       createPortgateApi({
         invoke: async () => undefined,

@@ -13,7 +13,9 @@ import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import type { Server as TcpServer } from 'node:net'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import type { PortManager } from '../core/port/PortManager'
+import type { KillPolicy } from '../core/security/KillPolicy'
 import type { PortRecord } from '../../shared/types'
 import { computeExposure } from '../core/port/exposure'
 import { parseLsofMachineOutput } from '../platform/mac/lsofParser'
@@ -315,7 +317,7 @@ export async function runPhase3Probe(manager: PortManager): Promise<void> {
     }
 
     const httpChild = spawn(
-      'node',
+      probeWhichNode(),
       ['-e', `require('http').createServer((q,s)=>s.end('ok')).listen(${PHASE3_HTTP_PORT}, '127.0.0.1')`],
       { cwd: PHASE3_WORKDIR, stdio: 'ignore' }
     )
@@ -426,13 +428,17 @@ export async function runPhase3Probe(manager: PortManager): Promise<void> {
     )
     if (!srvExposureOk) failures += 1
 
-    // App/Project 字段位保留（R-03 / M-04 拆段：阶段 4 Resolver 接入前值为空）
+    // 字段位保留（R-03）：阶段 4 起 Resolver 真实识别（本探针进程宿主为 Electron.app），
+    // 断言升级为「识别对象形态合法或为空」
     const slotsOk =
-      httpRecord.application === undefined &&
-      httpRecord.project === undefined &&
-      httpRecord.container === undefined &&
-      srvRecord.application === undefined
-    log3(`M04 slots application/project/container reserved-and-empty ok=${slotsOk}`)
+      (httpRecord.application === undefined ||
+        (httpRecord.application.name.length > 0 && (httpRecord.application.path ?? '').length > 0)) &&
+      (httpRecord.project === undefined || (httpRecord.project.name ?? '').length > 0) &&
+      httpRecord.container === undefined
+    log3(
+      `M04 slots application=${JSON.stringify(httpRecord.application?.name)} ` +
+        `project=${JSON.stringify(httpRecord.project?.name)} reserved-with-valid-shape ok=${slotsOk}`
+    )
     if (!slotsOk) failures += 1
   } catch (error) {
     failures += 1
@@ -450,4 +456,196 @@ export async function runPhase3Probe(manager: PortManager): Promise<void> {
     rmSync(PHASE3_WORKDIR, { recursive: true, force: true })
   }
   log3(`SUMMARY: ${failures === 0 ? 'PASS' : `FAIL (${failures} failures)`}`)
+}
+
+/* --------------------- 阶段 4 真机核对（AC-04 十项 / AC-05 / AC-09 / 10 / 11） --------------------- */
+
+const PHASE4_WORKDIR = join(homedir(), '.portgate-probes', 'phase4')
+const PHASE4_HTTP_PORT = 18193
+const PHASE4_FORCE_PORT = 18194
+
+/** 忽略 SIGTERM 的最小 TCP 监听器（AC-11 强制结束兜底验证） */
+const PHASE4_IGNORE_TERM_C = `#include <signal.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+int main(int argc, char **argv) {
+  int port = argc > 1 ? atoi(argv[1]) : 18194;
+  signal(SIGTERM, SIG_IGN);
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port = htons((unsigned short)port);
+  if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) return 1;
+  if (listen(fd, 4) != 0) return 1;
+  for (;;) {
+    int client = accept(fd, 0, 0);
+    if (client >= 0) { close(client); }
+  }
+}
+`
+
+function probeWhichNode(): string {
+  // PATH 解析启动的进程，ps comm 可能回退短名（无完整可执行路径）→ 探针用绝对路径 spawn
+  const result = spawnSync('which', ['node'])
+  const nodePath = result.stdout.toString().trim()
+  return nodePath.length > 0 ? nodePath : 'node'
+}
+
+function spawnHttpListener(nodeBin: string, port: number, cwd: string): ChildProcess {
+  return spawn(
+    nodeBin,
+    ['-e', `require('http').createServer((q,s)=>s.end('ok')).listen(${port}, '127.0.0.1')`],
+    { cwd, stdio: 'ignore' }
+  )
+}
+
+async function waitPortGone(manager: PortManager, protocol: 'TCP' | 'UDP', port: number, attempts = 4): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const { records } = await manager.scanCycle()
+    const present = records.some((record) => record.protocol === protocol && record.localPort === port)
+    if (!present) {
+      return true
+    }
+    await sleepProbe(400)
+  }
+  return false
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 阶段 4 真机核对（方案 §7 阶段 4）：
+ * - AC-04 十项终验：Application/Project 实识别（八项已由阶段 3 探针覆盖）；
+ * - AC-05 实树抽查：探针 node 的宿主应用经真实进程树识别（dev 链路宿主为 Electron.app）；
+ * - AC-09：普通用户进程 SIGTERM 终止闭环（DONE → 复扫消失 → 进程退出）；
+ * - AC-10：SYSTEM/SYSTEM_CRITICAL/UNKNOWN 级进程终止被拒（System Protected，不发信号不动真实系统进程）；
+ * - AC-11：SIGTERM 忽略进程 → 3s 宽限 → PENDING_FORCE → force SIGKILL → DONE。
+ */
+function log4(line: string): void {
+  console.log(`[portgate] [PHASE4] ${line}`)
+}
+
+export async function runPhase4Probe(manager: PortManager, killPolicy: KillPolicy): Promise<void> {
+  const children: ChildProcess[] = []
+  let failures = 0
+  try {
+    mkdirSync(PHASE4_WORKDIR, { recursive: true })
+    writeFileSync(join(PHASE4_WORKDIR, 'package.json'), JSON.stringify({ name: 'pg-phase4-probe', private: true }))
+
+    // ---- AC-04 十项（9/10）：Application + Project 实识别 ----
+    const httpChild = spawnHttpListener(probeWhichNode(), PHASE4_HTTP_PORT, PHASE4_WORKDIR)
+    children.push(httpChild)
+    await sleepProbe(400)
+    const record = await waitForPortRecord(manager, 'TCP', PHASE4_HTTP_PORT)
+    const projectOk =
+      record.project?.name === 'pg-phase4-probe' &&
+      record.project.type === 'node' &&
+      record.project.marker === 'package.json' &&
+      record.project.path === PHASE4_WORKDIR
+    log4(`AC04-9 Project name=${JSON.stringify(record.project?.name)} type=${record.project?.type} marker=${record.project?.marker} ok=${projectOk}`)
+    if (!projectOk) failures += 1
+
+    const applicationOk =
+      record.application !== undefined &&
+      record.application.name === 'Electron' &&
+      (record.application.path ?? '').endsWith('.app') &&
+      record.application.sourcePid !== undefined
+    log4(
+      `AC04-10 Application name=${JSON.stringify(record.application?.name)} path=${JSON.stringify(record.application?.path)} ` +
+        `bundleId=${JSON.stringify(record.application?.bundleId)} ok=${applicationOk}（AC-05 实树：node 的宿主应用经真实进程树识别）`
+    )
+    if (!applicationOk) failures += 1
+
+    // ---- AC-09：USER 进程 SIGTERM 终止闭环 ----
+    const termResult = await killPolicy.terminate(record.recordId)
+    const exited = termResult.status === 'DONE' && !pidAlive(record.pid)
+    const goneFromSnapshot = await waitPortGone(manager, 'TCP', PHASE4_HTTP_PORT)
+    log4(
+      `AC09 terminate status=${termResult.status} reason=${termResult.denyReason ?? "-"} level=${termResult.protectionLevel ?? "-"} detail=${termResult.detail ?? "-"} ` +
+        `pidAlive=${pidAlive(record.pid)} removedFromSnapshot=${goneFromSnapshot} ok=${exited && goneFromSnapshot}`
+    )
+    if (!(exited && goneFromSnapshot)) failures += 1
+
+    // ---- AC-10：非 USER 级拒绝（System Protected；不发信号，不动真实系统进程） ----
+    const { records: snapshot } = await manager.scanCycle()
+    const protectedRecord = snapshot.find(
+      (item) => item.security.level !== 'USER' && item.security.level !== undefined
+    )
+    if (protectedRecord === undefined) {
+      log4('AC10 SKIP：当前快照无非 USER 监听记录（少见）')
+      failures += 1
+    } else {
+      const deny = await killPolicy.terminate(protectedRecord.recordId)
+      const denyOk =
+        deny.status === 'DENIED' &&
+        deny.denyReason === 'PROTECTED' &&
+        deny.protectionLevel === protectedRecord.security.level
+      log4(
+        `AC10 deny recordId=${protectedRecord.recordId} level=${protectedRecord.security.level} ` +
+          `status=${deny.status} reason=${deny.denyReason} matchedLevel=${deny.protectionLevel} ok=${denyOk}`
+      )
+      if (!denyOk) failures += 1
+    }
+
+    // ---- AC-11：SIGTERM 忽略进程 → PENDING_FORCE → force SIGKILL → DONE ----
+    const forceSourcePath = join(PHASE4_WORKDIR, 'ignore-term.c')
+    const forceBinaryPath = join(PHASE4_WORKDIR, 'ignore-term-srv')
+    writeFileSync(forceSourcePath, PHASE4_IGNORE_TERM_C)
+    const compile = spawnSync('cc', ['-O2', '-o', forceBinaryPath, forceSourcePath])
+    if (compile.status !== 0) {
+      throw new Error(`ignore-term listener compile failed: ${String(compile.stderr)}`)
+    }
+    const forceChild = spawn(forceBinaryPath, [String(PHASE4_FORCE_PORT)], { stdio: 'ignore' })
+    children.push(forceChild)
+    await sleepProbe(400)
+    const forceRecord = await waitForPortRecord(manager, 'TCP', PHASE4_FORCE_PORT)
+    const pending = await killPolicy.terminate(forceRecord.recordId)
+    const pendingOk = pending.status === 'PENDING_FORCE' && pidAlive(recordForcePid(forceChild))
+    log4(`AC11 terminate on SIGTERM-ignoring proc status=${pending.status} reason=${pending.denyReason ?? "-"} level=${pending.protectionLevel ?? "-"} ok=${pendingOk}`)
+    if (!pendingOk) failures += 1
+    const forceResult = await killPolicy.forceTerminate(forceRecord.recordId)
+    await sleepProbe(300) // SIGKILL 信号送达与进程回收异步，稍候再断言
+    const forceOk = forceResult.status === 'DONE' && !pidAlive(recordForcePid(forceChild))
+    const forceGone = await waitPortGone(manager, 'TCP', PHASE4_FORCE_PORT)
+    log4(
+      `AC11 force status=${forceResult.status} pidAlive=${pidAlive(recordForcePid(forceChild))} ` +
+        `removedFromSnapshot=${forceGone} ok=${forceOk && forceGone}`
+    )
+    if (!(forceOk && forceGone)) failures += 1
+  } catch (error) {
+    failures += 1
+    log4(`phase4 probe aborted with error: ${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    for (const child of children) {
+      try {
+        if (child.pid !== undefined) {
+          process.kill(child.pid, 'SIGKILL')
+        }
+      } catch {
+        // 已退出忽略
+      }
+    }
+    rmSync(PHASE4_WORKDIR, { recursive: true, force: true })
+  }
+  log4(`SUMMARY: ${failures === 0 ? 'PASS' : `FAIL (${failures} failures)`}`)
+}
+
+function recordForcePid(child: ChildProcess): number {
+  const pid = child.pid
+  if (pid === undefined) {
+    return -1
+  }
+  return pid
 }

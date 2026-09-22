@@ -13,6 +13,7 @@ import {
   IPC_CHANNEL_WHITELIST,
   normalizeListQuery,
   normalizeRecordId,
+  normalizeRevealParams,
   normalizeSettingsUpdate
 } from '../../src/shared/ipc-contract'
 import { CSP_DEV, CSP_PROD, SCAN_INTERVAL_OPTIONS, THEME_NAMES } from '../../src/shared/constants'
@@ -85,6 +86,29 @@ describe('IPC 契约：唯一职责注释与互不重叠（方案 §4.2 / m-05�
     const list = IPC_CHANNEL_CONTRACTS.find((contract) => contract.channel === 'port:list')
     expect(list?.paramFields).toEqual(['query'])
     expect(list?.paramFields).not.toContain('tab')
+  })
+
+  it('阶段 4 通道入参契约：terminate/forceTerminate 仅 recordId；reveal 为 recordId+target（需求 §15 红线：无 kill(pid) 形态）', () => {
+    const terminate = IPC_CHANNEL_CONTRACTS.find((contract) => contract.channel === 'port:terminate')
+    const forceTerminate = IPC_CHANNEL_CONTRACTS.find(
+      (contract) => contract.channel === 'port:forceTerminate'
+    )
+    const reveal = IPC_CHANNEL_CONTRACTS.find((contract) => contract.channel === 'record:reveal')
+    expect(terminate?.paramFields).toEqual(['recordId'])
+    expect(forceTerminate?.paramFields).toEqual(['recordId'])
+    expect(reveal?.paramFields).toEqual(['recordId', 'target'])
+    expect(IPC_CHANNEL_WHITELIST.some((channel) => channel.includes('kill'))).toBe(false)
+  })
+
+  it('record:reveal 入参契约：recordId 非空字符串 + target 仅 workdir/project，否则拒绝', () => {
+    expect(normalizeRevealParams({ recordId: 'TCP:127.0.0.1:80:1', target: 'workdir' })).toEqual({
+      recordId: 'TCP:127.0.0.1:80:1',
+      target: 'workdir'
+    })
+    expect(normalizeRevealParams({ recordId: 'x', target: 'project' })?.target).toBe('project')
+    expect(normalizeRevealParams({ recordId: 'x', target: 'arbitrary-path' })).toBeNull()
+    expect(normalizeRevealParams({ target: 'workdir' })).toBeNull()
+    expect(normalizeRevealParams(null)).toBeNull()
   })
 
   it('port:list 入参契约：{ query?: string }，缺省/非法载荷归一为空串（全量）', () => {

@@ -183,3 +183,23 @@ export interface PortListResult {
 export interface PortRefreshResult {
   ok: boolean
 }
+
+/* ------------------------------ 安全结束契约（需求 §15-17） ------------------------------ */
+
+/** 终止状态机终态（方案 §5.11：Renderer 全程只见 recordId 与终态/拒绝原因） */
+export type TerminateStatus = 'DONE' | 'DENIED' | 'PENDING_FORCE' | 'FAILED'
+
+export type TerminateDenyReason = 'RECORD_GONE' | 'PID_REUSE' | 'PROTECTED'
+
+export interface TerminateResult {
+  recordId: string
+  status: TerminateStatus
+  denyReason?: TerminateDenyReason
+  /** DENIED:PROTECTED 时附保护级（UI 映射 System Protected 文案，需求 §16） */
+  protectionLevel?: SecurityLevel
+  /** 附加信息：DONE 阶段的 ALREADY_EXITED、FAILED 的错误消息等 */
+  detail?: string
+}
+
+/** record:reveal 目标（方案 §4.2：'workdir' | 'project'） */
+export type RevealTarget = 'workdir' | 'project'

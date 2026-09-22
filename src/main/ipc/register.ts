@@ -5,15 +5,21 @@
  * 属阶段 4、port:history 属阶段 5，未到阶段严禁挂载（m-01）。
  * 设置暂存主进程内存（阶段 5 迁移 SettingsStore 落库）；扫描周期变更实时回调组装层。
  */
-import { ipcMain, nativeTheme } from 'electron'
+import { ipcMain, nativeTheme, shell } from 'electron'
 import { DEFAULT_SCAN_INTERVAL } from '../../shared/constants'
 import {
   IPC_CHANNELS,
   normalizeListQuery,
   normalizeRecordId,
+  normalizeRevealParams,
   normalizeSettingsUpdate
 } from '../../shared/ipc-contract'
-import type { PortRefreshResult, SettingsSetResult, SettingsSnapshot } from '../../shared/types'
+import type {
+  PortRefreshResult,
+  SettingsSetResult,
+  SettingsSnapshot,
+  TerminateResult
+} from '../../shared/types'
 
 /** 主进程组装层注入的服务面（由 src/main/index.ts 装配） */
 export interface PortgateServices {
@@ -32,6 +38,10 @@ export interface PortgateServices {
   requestRefresh: () => void
   /** settings:set 变更扫描周期后实时生效 */
   applyScanInterval: (intervalMs: 1000 | 2000 | 5000) => void
+  /** 安全终止（KillPolicy 状态机；仅接受 recordId，需求 §15 红线） */
+  terminate: (recordId: string) => Promise<TerminateResult>
+  /** 强制终止（重新校验后 SIGKILL） */
+  forceTerminate: (recordId: string) => Promise<TerminateResult>
 }
 
 const settings: SettingsSnapshot = {
@@ -69,6 +79,45 @@ export function registerIpcHandlers(services: PortgateServices): void {
 
   ipcMain.handle(IPC_CHANNELS.PORT_REFRESH, (): PortRefreshResult => {
     services.requestRefresh()
+    return { ok: true }
+  })
+
+  // 安全终止（需求 §15：terminate(recordId) 形态；主进程全量校验后才执行，拒绝原因回传）
+  ipcMain.handle(IPC_CHANNELS.PORT_TERMINATE, async (_event, raw: unknown): Promise<TerminateResult> => {
+    const recordId = normalizeRecordId(raw)
+    return recordId === null
+      ? { recordId: '', status: 'DENIED', denyReason: 'RECORD_GONE' }
+      : services.terminate(recordId)
+  })
+
+  // 强制终止（需求 §17：重新全量校验后 SIGKILL）
+  ipcMain.handle(IPC_CHANNELS.PORT_FORCE_TERMINATE, async (_event, raw: unknown): Promise<TerminateResult> => {
+    const recordId = normalizeRecordId(raw)
+    return recordId === null
+      ? { recordId: '', status: 'DENIED', denyReason: 'RECORD_GONE' }
+      : services.forceTerminate(recordId)
+  })
+
+  // 打开项目/工作目录（方案 §4.2：main 校验 recordId 存在且路径归属后才 openPath，不接受任意路径）
+  ipcMain.handle(IPC_CHANNELS.RECORD_REVEAL, async (_event, raw: unknown): Promise<{ ok: boolean }> => {
+    const params = normalizeRevealParams(raw)
+    if (params === null) {
+      return { ok: false }
+    }
+    const record = services.findRecord(params.recordId)
+    if (record === null || typeof record !== 'object') {
+      return { ok: false }
+    }
+    const candidate = record as {
+      process?: { workingDirectory?: string }
+      project?: { path?: string }
+    }
+    const targetPath =
+      params.target === 'workdir' ? candidate.process?.workingDirectory : candidate.project?.path
+    if (targetPath === undefined || targetPath.length === 0) {
+      return { ok: false }
+    }
+    await shell.openPath(targetPath)
     return { ok: true }
   })
 }

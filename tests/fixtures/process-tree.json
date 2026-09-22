@@ -1,0 +1,10 @@
+{
+  "comment": "node→npm→zsh→login→iTerm2 实树形态（方案 §5.7 fixture，AC-05）",
+  "processes": [
+    { "pid": 100, "ppid": 200, "uid": 501, "user": "leiyu", "startedAt": 1000, "cpuPercent": 1.5, "memPercent": 0.5, "executablePath": "/usr/local/bin/node", "commandLine": "node server.js" },
+    { "pid": 200, "ppid": 300, "uid": 501, "user": "leiyu", "startedAt": 900, "cpuPercent": 0.5, "memPercent": 0.4, "executablePath": "/usr/local/bin/npm", "commandLine": "npm start" },
+    { "pid": 300, "ppid": 400, "uid": 501, "user": "leiyu", "startedAt": 800, "cpuPercent": 0.1, "memPercent": 0.2, "executablePath": "/bin/zsh", "commandLine": "-zsh" },
+    { "pid": 400, "ppid": 500, "uid": 501, "user": "leiyu", "startedAt": 700, "cpuPercent": 0.0, "memPercent": 0.1, "executablePath": "/usr/sbin/login", "commandLine": "login -pf leiyu" },
+    { "pid": 500, "ppid": 1, "uid": 501, "user": "leiyu", "startedAt": 600, "cpuPercent": 2.0, "memPercent": 1.0, "executablePath": "/Applications/iTerm.app/Contents/MacOS/iTerm2", "commandLine": "/Applications/iTerm.app/Contents/MacOS/iTerm2" }
+  ]
+}

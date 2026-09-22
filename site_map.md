@@ -21,3 +21,9 @@
 ### [2026-09-23 03:00] feat(ui): 实现统一搜索、命中高亮与端口详情 Drawer（阶段3）
 
 - 新增搜索域（src/main/core/search：引擎/字段表/高亮函数）与渲染组件（SearchBar/HighlightText/DetailDrawer）
+
+## 待确认更新
+
+### [2026-09-23 03:33] feat(security): 实现 Resolver 链与安全 Kill 闭环（阶段4）
+
+- 新增识别域（src/main/core/resolve：应用/项目/容器）与安全域（src/main/core/security：分类器/终止状态机），IPC 白名单扩至 9 通道

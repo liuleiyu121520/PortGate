@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import type { HighlightRange, PortRecord, SearchMatchInfo } from '../../shared/types'
 import HighlightText from './HighlightText.vue'
+import { useTerminate } from '../composables/terminate'
 import { formatClock, formatDuration } from '../utils/format'
 
 /**
  * 端口详情 Drawer（需求 §5 布局，480px）：Network / Process / Time / Runtime 分区；
- * Application / Project 行仅保留字段位（M-04 拆段口径：阶段 4 Resolver 接入前值可为空）；
- * 操作按钮（打开项目目录/复制命令/结束进程）阶段 3 占位禁用，阶段 4 经
- * record:reveal / port:terminate 白名单通道接通（不得提前挂通道）。
- * 命中高亮沿用 HighlightText 唯一实现（区间来自 port:list 的 matches）。
+ * 阶段 4 接通操作按钮：结束进程（USER 级；确认框 → SIGTERM → PENDING_FORCE 二次强制确认，
+ * 非 USER 显示 System Protected 禁止态）、打开项目目录（record:reveal，main 校验路径归属）、
+ * 复制命令（renderer navigator.clipboard，无 IPC）。命中高亮沿用 HighlightText 唯一实现。
  */
 const props = defineProps<{
   open: boolean
@@ -20,6 +21,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
 }>()
+
+const { confirmTerminate } = useTerminate(() => {
+  // 终止成功后主进程触发即时重扫，DIFF 局部刷新列表；关闭 Drawer 避免展示已消失记录
+  emit('close')
+})
 
 const now = ref(Date.now())
 let ticker: ReturnType<typeof setInterval> | null = null
@@ -59,6 +65,37 @@ const exposure = computed(() => {
     ? 'Local · 仅本机'
     : 'Exposed · 对外监听'
 })
+
+const isProtected = computed(
+  () => props.record !== null && props.record.security.level !== 'USER'
+)
+
+function onReveal(): void {
+  const record = props.record
+  if (record === null || record.project?.path === undefined) {
+    return
+  }
+  void window.portgate
+    .revealRecord(record.recordId, 'project')
+    .then((result: { ok: boolean }) => {
+      if (!result.ok) {
+        message.error('打开目录失败（路径不存在或已失效）')
+      }
+    })
+}
+
+async function onCopyCommand(): Promise<void> {
+  const commandLine = props.record?.process.commandLine
+  if (commandLine === undefined) {
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(commandLine)
+    message.success('命令已复制')
+  } catch {
+    message.error('复制失败')
+  }
+}
 </script>
 
 <template>
@@ -79,11 +116,25 @@ const exposure = computed(() => {
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
             <dt>Application</dt>
-            <dd>{{ record.application?.name ?? '—' }}</dd>
+            <dd>
+              <HighlightText
+                v-if="record.application !== undefined"
+                :text="record.application.name"
+                :ranges="rangesFor('applicationName')"
+              />
+              <span v-else>—</span>
+            </dd>
           </div>
           <div class="pg-drawer__row">
             <dt>Project</dt>
-            <dd>{{ record.project?.name ?? '—' }}</dd>
+            <dd>
+              <HighlightText
+                v-if="record.project !== undefined"
+                :text="record.project.name ?? '—'"
+                :ranges="rangesFor('projectName')"
+              />
+              <span v-else>—</span>
+            </dd>
           </div>
         </dl>
       </section>
@@ -220,26 +271,41 @@ const exposure = computed(() => {
       <footer class="pg-drawer__actions">
         <a-button
           size="small"
-          disabled
+          :disabled="record.project?.path === undefined"
+          @click="onReveal"
         >
           打开项目目录
         </a-button>
         <a-button
           size="small"
-          disabled
+          :disabled="record.process.commandLine === undefined"
+          @click="onCopyCommand"
         >
           复制命令
         </a-button>
+        <a-tooltip v-if="isProtected">
+          <template #title>
+            System Protected（{{ record.security.level }}），禁止结束
+          </template>
+          <a-button
+            size="small"
+            danger
+            disabled
+          >
+            结束进程
+          </a-button>
+        </a-tooltip>
         <a-button
+          v-else
           size="small"
           danger
-          disabled
+          @click="confirmTerminate(record)"
         >
           结束进程
         </a-button>
       </footer>
       <p class="pg-drawer__hint">
-        对外监听 ≠ 公网可达；操作按钮将在阶段 4 接通。
+        对外监听 ≠ 公网可达；终止仅对 USER 级进程放行，主进程全量校验防 PID 复用。
       </p>
     </div>
   </a-drawer>

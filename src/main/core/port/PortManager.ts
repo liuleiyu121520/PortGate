@@ -1,19 +1,40 @@
 /**
  * 端口管理器（方案 §5.4 扫描流水线组装，方案 §10：当前数据来自
  * PlatformAdapter → PortScanner → MemoryStore → Renderer）：
- * 每轮：监听扫描 → 全量进程表刷新 → 新涉及 PID 批量补工作目录 → PortRecord 组装
- * （timing 继承 + exposure + security 基础字段）→ DiffEngine → 应用快照。
- * 任一步失败保留上一快照并返回 error（由 PortScanner 推 SCAN_ERROR）。
- * security 完整判定属阶段 4 SecurityClassifier，本阶段固定 UNKNOWN（接口位已留）。
+ * 每轮：监听扫描 → 全量进程表刷新 → 新涉及 PID 批量补工作目录 → Resolver 增强
+ * （§5.7~5.9，均带缓存）→ PortRecord 组装（timing 继承 + exposure + security）→
+ * DiffEngine → 应用快照。任一步失败保留上一快照并返回 error（由 PortScanner 推 SCAN_ERROR）。
+ * SecurityClassifier 完整规则随阶段 4 接入（组装层注入 classify）。
  */
-import type { DiffEvent, PortListResult, PortRecord, ProcessInfo } from '../../../shared/types'
+import type {
+  ApplicationInfo,
+  ContainerInfo,
+  DiffEvent,
+  PortListResult,
+  PortRecord,
+  ProcessInfo,
+  ProjectInfo
+} from '../../../shared/types'
 import type { PlatformAdapter, RawPort } from '../../platform/types'
 import type { ProcessResolver } from '../resolve/ProcessResolver'
+import type { SecurityInput } from '../security/SecurityClassifier'
 import { MemoryStore } from '../store/MemoryStore'
 import { computeStats } from './exposure'
 import { diffSnapshots } from './DiffEngine'
 import { buildRecordId } from './recordId'
 import { searchRecords } from '../search/SearchEngine'
+
+/** 扫描流水线增强器（方案 §5.7~5.10：Resolver 增强 + 保护级判定，均由组装层注入） */
+export interface PortManagerEnhancers {
+  /** 宿主应用识别（走 ProcessResolver 树缓存，不重复执行外部命令） */
+  application?: (record: Pick<PortRecord, 'pid' | 'process'>) => ApplicationInfo | undefined
+  /** 项目识别（基于 cwd 向上查 marker） */
+  project?: (pid: number, cwd: string | undefined) => ProjectInfo | undefined
+  /** Docker 端口映射关联（内部 10s 节流 + 静默降级） */
+  docker?: (localAddress: string, localPort: number) => ContainerInfo | undefined
+  /** 保护级判定（方案 §5.10 七规则） */
+  classify?: (input: SecurityInput) => PortRecord['security']['level']
+}
 
 export interface ScanCycleResult {
   events: DiffEvent[]
@@ -25,11 +46,15 @@ export interface ScanCycleResult {
 
 export class PortManager {
   private readonly store = new MemoryStore()
+  private readonly enhancers: PortManagerEnhancers
 
   constructor(
     private readonly adapter: PlatformAdapter,
-    private readonly resolver: ProcessResolver
-  ) {}
+    private readonly resolver: ProcessResolver,
+    enhancers: PortManagerEnhancers = {}
+  ) {
+    this.enhancers = enhancers
+  }
 
   /**
    * 当前快照（方案 §4.2 / §5.12）：
@@ -114,6 +139,19 @@ export class PortManager {
       startedAt: proc?.startedAt
     }
 
+    // 阶段 4 增强：Resolver 识别 + 保护级判定（container 关联在单测与真机核对覆盖）
+    const draft: Pick<PortRecord, 'pid' | 'process'> = { pid: port.pid, process: processInfo }
+    const application = this.enhancers.application?.(draft)
+    const project = cwd !== undefined ? this.enhancers.project?.(port.pid, cwd) : undefined
+    const container = this.enhancers.docker?.(port.localAddress, port.localPort)
+    const level =
+      this.enhancers.classify?.({
+        pid: port.pid,
+        uid: proc?.uid,
+        user: proc?.user,
+        executablePath
+      }) ?? 'UNKNOWN'
+
     return {
       recordId,
       protocol: port.protocol,
@@ -124,12 +162,14 @@ export class PortManager {
       state: port.state ?? undefined,
       pid: port.pid,
       process: processInfo,
-      // application / project / container：阶段 4 Resolver 接入（R-03 字段位保留，本阶段不设）
+      application,
+      project,
+      container,
       timing: {
         firstSeen: existing?.timing.firstSeen ?? now,
         lastSeen: now
       },
-      security: { level: 'UNKNOWN' },
+      security: { level },
       runtime: proc ? { cpuPercent: proc.cpuPercent, memPercent: proc.memPercent } : undefined
     }
   }

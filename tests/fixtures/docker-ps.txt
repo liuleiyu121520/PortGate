@@ -1,0 +1,3 @@
+a1b2c3d4e5f6	mysql-server	mysql:8.0	0.0.0.0:15433->5432/tcp, [::]:15433->5432/tcp
+d4e5f6a7b8c9	ci-buddy-web	node:20-alpine	0.0.0.0:3000->3000/tcp, :::3000->3000/tcp, 9229/tcp
+f0e1d2c3b4a5	redis-cache	redis:7	127.0.0.1:16379->6379/tcp

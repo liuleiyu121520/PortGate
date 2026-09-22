@@ -8,12 +8,15 @@ import SearchBar from './components/SearchBar.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
+import { useTerminate } from './composables/terminate'
 import { THEME_PALETTES } from './theme'
 import type { HighlightRange, PortRecord } from '../shared/types'
 import { formatDuration } from './utils/format'
 
 const settingsStore = useSettingsStore()
 const portsStore = usePortsStore()
+// 安全终止交互（确认框/PENDING_FORCE 强制二次确认/拒绝文案映射；终止后主进程触发即时重扫局部刷新）
+const { confirmTerminate } = useTerminate()
 
 const palette = computed(() => THEME_PALETTES[settingsStore.theme])
 
@@ -224,9 +227,22 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
                   <span>{{ uptimeText(record) }}</span>
                 </template>
                 <template v-else-if="column.key === 'action'">
+                  <a-tooltip
+                    v-if="record.security.level !== 'USER'"
+                    :title="`System Protected（${record.security.level}）`"
+                  >
+                    <a-button
+                      size="small"
+                      disabled
+                    >
+                      结束
+                    </a-button>
+                  </a-tooltip>
                   <a-button
+                    v-else
                     size="small"
-                    disabled
+                    danger
+                    @click.stop="confirmTerminate(record)"
                   >
                     结束
                   </a-button>

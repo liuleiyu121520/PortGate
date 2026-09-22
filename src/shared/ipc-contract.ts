@@ -10,10 +10,12 @@ import type {
   PortEvent,
   PortRecord,
   PortRefreshResult,
+  RevealTarget,
   ScanInterval,
   SettingsSetResult,
   SettingsSnapshot,
   SettingsUpdateParams,
+  TerminateResult,
   ThemeName
 } from './types'
 import { SCAN_INTERVAL_OPTIONS, THEME_NAMES } from './constants'
@@ -23,14 +25,20 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   /** 唯一职责：写入应用设置（扫描周期仅接受 1000/2000/5000、主题仅接受 light/dark），返回写入结果 */
   SETTINGS_SET: 'settings:set',
-  /** 唯一职责：拉取当前端口快照全量（records+stats），供 renderer 首载与按需全量刷新，不做历史检索 */
+  /** 唯一职责：拉取当前端口快照（records+stats+搜索命中区间），按 query 过滤排序，不做历史检索 */
   PORT_LIST: 'port:list',
   /** 唯一职责：按 recordId 查询单条端口记录详情，recordId 不存在时返回 null */
   PORT_DETAIL: 'port:detail',
   /** 唯一职责：请求主进程触发一次去抖立即扫描（500ms 合并），仅返回受理结果不做数据返回 */
   PORT_REFRESH: 'port:refresh',
   /** 唯一职责：主进程向 renderer 推送端口变化（SNAPSHOT/DIFF/SCAN_ERROR 三类事件，renderer 局部更新） */
-  PORT_EVENTS: 'port:events'
+  PORT_EVENTS: 'port:events',
+  /** 唯一职责：按 recordId 发起安全终止（主进程全量校验后 SIGTERM，3s 宽限），返回状态机终态；不接受 PID */
+  PORT_TERMINATE: 'port:terminate',
+  /** 唯一职责：按 recordId 对 SIGTERM 未响应进程强制终止（重新全量校验后 SIGKILL），返回状态机终态；不接受 PID */
+  PORT_FORCE_TERMINATE: 'port:forceTerminate',
+  /** 唯一职责：按 recordId 打开其工作目录或项目目录（main 校验路径归属后 shell.openPath），不接受任意路径 */
+  RECORD_REVEAL: 'record:reveal'
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
@@ -42,7 +50,10 @@ export const IPC_CHANNEL_WHITELIST: readonly IpcChannel[] = [
   IPC_CHANNELS.PORT_LIST,
   IPC_CHANNELS.PORT_DETAIL,
   IPC_CHANNELS.PORT_REFRESH,
-  IPC_CHANNELS.PORT_EVENTS
+  IPC_CHANNELS.PORT_EVENTS,
+  IPC_CHANNELS.PORT_TERMINATE,
+  IPC_CHANNELS.PORT_FORCE_TERMINATE,
+  IPC_CHANNELS.RECORD_REVEAL
 ]
 
 /** 单个 channel 的契约元数据（契约测试据此断言职责唯一与入参消费） */
@@ -93,6 +104,24 @@ export const IPC_CHANNEL_CONTRACTS: readonly IpcChannelContract[] = [
     direction: 'P',
     responsibility: '推送端口变化事件（SNAPSHOT/DIFF/SCAN_ERROR），renderer 据此局部更新不整表刷新',
     paramFields: []
+  },
+  {
+    channel: IPC_CHANNELS.PORT_TERMINATE,
+    direction: 'R',
+    responsibility: '按 recordId 发起安全终止（重读校验后 SIGTERM、3s 宽限），返回状态机终态与拒绝原因',
+    paramFields: ['recordId']
+  },
+  {
+    channel: IPC_CHANNELS.PORT_FORCE_TERMINATE,
+    direction: 'R',
+    responsibility: '按 recordId 对 SIGTERM 未响应进程强制终止（重新校验后 SIGKILL），返回状态机终态',
+    paramFields: ['recordId']
+  },
+  {
+    channel: IPC_CHANNELS.RECORD_REVEAL,
+    direction: 'R',
+    responsibility: '按 recordId 打开其工作目录或项目目录（校验路径归属后 openPath），不接受任意路径',
+    paramFields: ['recordId', 'target']
   }
 ]
 
@@ -161,6 +190,22 @@ export function normalizeListQuery(raw: unknown): string {
   return typeof query === 'string' ? query : ''
 }
 
+/** 校验 record:reveal 入参（契约级：{ recordId: string, target: 'workdir' | 'project' }） */
+export function normalizeRevealParams(raw: unknown): { recordId: string; target: RevealTarget } | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null
+  }
+  const recordId = (raw as Record<string, unknown>).recordId
+  const target = (raw as Record<string, unknown>).target
+  if (typeof recordId !== 'string' || recordId.length === 0) {
+    return null
+  }
+  if (target !== 'workdir' && target !== 'project') {
+    return null
+  }
+  return { recordId, target }
+}
+
 /** window.portgate 暴露的桥 API（preload 实现，renderer 仅经此访问；与白名单一一对应） */
 export interface PortgateApi {
   getSettings(): Promise<SettingsSnapshot>
@@ -171,4 +216,10 @@ export interface PortgateApi {
   refreshPorts(): Promise<PortRefreshResult>
   /** 订阅主进程推送（P 通道）；返回退订函数 */
   onPortEvents(listener: (event: PortEvent) => void): () => void
+  /** 安全终止：仅接受 recordId（需求 §15 红线：renderer 无任何 kill(pid) 能力） */
+  terminatePort(recordId: string): Promise<TerminateResult>
+  /** 强制终止：仅接受 recordId（SIGTERM 未响应后的 SIGKILL 兜底，需求 §17） */
+  forceTerminatePort(recordId: string): Promise<TerminateResult>
+  /** 打开记录的工作目录/项目目录（main 校验路径归属） */
+  revealRecord(recordId: string, target: RevealTarget): Promise<{ ok: boolean }>
 }

@@ -9,6 +9,27 @@ export const DEFAULT_SCAN_INTERVAL: ScanInterval = 2000
 /** 允许的主题枚举（需求 §23） */
 export const THEME_NAMES: readonly ThemeName[] = ['light', 'dark']
 
+/* --------------- SecurityClassifier 路径前缀常量（方案 §5.10：收敛于此，§16 高风险路径） --------------- */
+
+/** 高风险路径 → SYSTEM_CRITICAL（需求 §16：/System/、/usr/libexec/） */
+export const SYSTEM_CRITICAL_PATH_PREFIXES: readonly string[] = ['/System/', '/usr/libexec/']
+
+/** 系统路径 → SYSTEM */
+export const SYSTEM_PATH_PREFIXES: readonly string[] = [
+  '/usr/sbin/',
+  '/usr/bin/',
+  '/sbin/',
+  '/private/var/db/'
+]
+
+/** 用户域路径（方案 §5.10 规则 6：在用户域且 uid === 当前 uid → USER） */
+export const USER_DOMAIN_PREFIXES: readonly string[] = [
+  '/Users/',
+  '/Applications/',
+  '/opt/homebrew/',
+  '/usr/local/'
+]
+
 /**
  * CSP 定稿记录（方案 §3.3 / v1.2 m-06「二选一」的定稿与存档，位于 ipc-contract 同级常量文件）。
  *

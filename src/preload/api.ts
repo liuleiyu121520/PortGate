@@ -10,9 +10,11 @@ import type {
   PortListResult,
   PortRecord,
   PortRefreshResult,
+  RevealTarget,
   SettingsSetResult,
   SettingsSnapshot,
-  SettingsUpdateParams
+  SettingsUpdateParams,
+  TerminateResult
 } from '../shared/types'
 
 /** 受控桥入口：preload/index.ts 注入 ipcRenderer.invoke / ipcRenderer.on */
@@ -29,7 +31,10 @@ export const PORTGATE_METHODS = {
   getPortList: IPC_CHANNELS.PORT_LIST,
   getPortDetail: IPC_CHANNELS.PORT_DETAIL,
   refreshPorts: IPC_CHANNELS.PORT_REFRESH,
-  onPortEvents: IPC_CHANNELS.PORT_EVENTS
+  onPortEvents: IPC_CHANNELS.PORT_EVENTS,
+  terminatePort: IPC_CHANNELS.PORT_TERMINATE,
+  forceTerminatePort: IPC_CHANNELS.PORT_FORCE_TERMINATE,
+  revealRecord: IPC_CHANNELS.RECORD_REVEAL
 } as const satisfies Record<keyof PortgateApi, IpcChannel>
 
 const WHITELIST_SET: ReadonlySet<string> = new Set<string>(IPC_CHANNEL_WHITELIST)
@@ -61,6 +66,13 @@ export function createPortgateApi(bridge: IpcBridge): PortgateApi {
     refreshPorts: () =>
       guardedInvoke(PORTGATE_METHODS.refreshPorts) as Promise<PortRefreshResult>,
     onPortEvents: (listener: (event: PortEvent) => void) =>
-      guardedSubscribe(PORTGATE_METHODS.onPortEvents, (payload) => listener(payload as PortEvent))
+      guardedSubscribe(PORTGATE_METHODS.onPortEvents, (payload) => listener(payload as PortEvent)),
+    // 安全红线（需求 §15）：只传 recordId，renderer 不接触 PID/信号
+    terminatePort: (recordId: string) =>
+      guardedInvoke(PORTGATE_METHODS.terminatePort, recordId) as Promise<TerminateResult>,
+    forceTerminatePort: (recordId: string) =>
+      guardedInvoke(PORTGATE_METHODS.forceTerminatePort, recordId) as Promise<TerminateResult>,
+    revealRecord: (recordId: string, target: RevealTarget) =>
+      guardedInvoke(PORTGATE_METHODS.revealRecord, { recordId, target }) as Promise<{ ok: boolean }>
   }
 }

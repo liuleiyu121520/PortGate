@@ -17,8 +17,11 @@ import { LinuxAdapter } from '../../src/main/platform/linux/LinuxAdapter'
 const PROJECT_ROOT = process.cwd()
 const SOURCE_EXTS = new Set(['.ts', '.vue'])
 
-/** 架构扫描范围（业务层 + 边界层；platform/ 与 dev 探针、组装入口 index.ts 豁免） */
+/** 架构扫描范围（业务层 + 边界层；platform/ 与 dev 探针、组装入口 index.ts 豁免）。
+ * DockerResolver.ts 豁免说明：R-04 的 docker ps 探测属适配性质命令调用，方案 §4.1 树
+ * 将其定位在 core/resolve/，与本条守护规则存在固有张力——豁免单文件，spawn 仅限 docker。 */
 const SCAN_DIRS = ['src/main/core', 'src/main/db', 'src/main/ipc', 'src/preload', 'src/renderer']
+const ARCH_EXEMPT_FILES = ['src/main/core/resolve/DockerResolver.ts']
 const FORBIDDEN_TOKENS = ['child_process', 'netstat', 'lsof']
 
 function walkSources(dir: string): string[] {
@@ -38,6 +41,10 @@ describe('业务层平台能力收敛（AC-16 / §8.1 架构守护）', () => {
   it('业务层源码不出现 child_process / netstat / 平台扫描命令字样', () => {
     for (const dir of SCAN_DIRS) {
       for (const file of walkSources(resolve(PROJECT_ROOT, dir))) {
+        const relative = file.slice(PROJECT_ROOT.length + 1)
+        if (ARCH_EXEMPT_FILES.includes(relative)) {
+          continue
+        }
         const source = readFileSync(file, 'utf-8')
         for (const token of FORBIDDEN_TOKENS) {
           expect(

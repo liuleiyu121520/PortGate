@@ -5,9 +5,14 @@ import type { PortgateServices } from './ipc/register'
 import { runSqliteSmoke } from './db/smoke'
 import { createAdapter } from './platform/factory'
 import { ProcessResolver } from './core/resolve/ProcessResolver'
+import { ApplicationResolver } from './core/resolve/ApplicationResolver'
+import { ProjectResolver } from './core/resolve/ProjectResolver'
+import { DockerResolver } from './core/resolve/DockerResolver'
+import { SecurityClassifier } from './core/security/SecurityClassifier'
+import { KillPolicy } from './core/security/KillPolicy'
 import { PortManager } from './core/port/PortManager'
 import { PortScanner } from './core/port/PortScanner'
-import { runPhase2Probe, runPhase3Probe } from './dev/probe'
+import { runPhase2Probe, runPhase3Probe, runPhase4Probe } from './dev/probe'
 import type { PortEvent } from '../shared/types'
 
 /** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验；不启动周期扫描，由探针手动驱动） */
@@ -31,8 +36,24 @@ function broadcastPortEvent(event: PortEvent): void {
 
 // ---- 扫描数据通路组装（方案 §10：PlatformAdapter → PortScanner → MemoryStore → Renderer） ----
 const adapter = createAdapter()
-const resolver = new ProcessResolver()
-const portManager = new PortManager(adapter, resolver)
+const processResolver = new ProcessResolver()
+const applicationResolver = new ApplicationResolver()
+const projectResolver = new ProjectResolver()
+const dockerResolver = new DockerResolver()
+const classifier = new SecurityClassifier()
+const portManager = new PortManager(adapter, processResolver, {
+  application: (record) => applicationResolver.resolve(processResolver.getTree(record.pid)),
+  project: (pid, cwd) => (cwd !== undefined ? projectResolver.resolve(pid, cwd) : undefined),
+  docker: (localAddress, localPort) => dockerResolver.match(localAddress, localPort),
+  classify: (input) => classifier.classify(input)
+})
+const killPolicy = new KillPolicy({
+  findRecord: (recordId) => portManager.findRecord(recordId),
+  getProcess: (pid) => adapter.getProcess(pid),
+  terminateProcess: (pid, force) => adapter.terminateProcess(pid, force),
+  classifier,
+  onExitConfirmed: () => scanner.requestRefresh()
+})
 const scanner = new PortScanner(portManager, (result) => {
   if (result.error !== null) {
     broadcastPortEvent({ type: 'SCAN_ERROR', payload: { message: result.error } })
@@ -53,7 +74,9 @@ const services: PortgateServices = {
   listSnapshot: (query = '') => portManager.listSnapshot(query),
   findRecord: (recordId) => portManager.findRecord(recordId),
   requestRefresh: () => scanner.requestRefresh(),
-  applyScanInterval: (intervalMs) => scanner.updateInterval(intervalMs)
+  applyScanInterval: (intervalMs) => scanner.updateInterval(intervalMs),
+  terminate: (recordId) => killPolicy.terminate(recordId),
+  forceTerminate: (recordId) => killPolicy.forceTerminate(recordId)
 }
 
 function createWindow(): void {
@@ -180,9 +203,10 @@ app.whenReady().then(() => {
   createWindow()
 
   if (SMOKE_MODE) {
-    // 阶段 2/3 真机核对（M-01 + M-04 第一段）：手动驱动扫描轮，避免与周期扫描竞态；完成后探针链收口退出
+    // 阶段 2/3/4 真机核对（M-01 + M-04 十项 + AC-05/09/10/11）：手动驱动扫描轮；完成后探针链收口退出
     void runPhase2Probe(portManager)
       .then(() => runPhase3Probe(portManager))
+      .then(() => runPhase4Probe(portManager, killPolicy))
       .catch((error: unknown) => {
         log(`[SMOKE] probe chain aborted — ${error instanceof Error ? error.message : String(error)}`)
       })
