@@ -1,0 +1,5 @@
+  81234   4512   501 leiyu Mon Sep 21 14:08:26 2026  12.3  1.2 /Users/leiyu/code/github/PortGate/node
+  4512      1   501 leiyu Sun Sep  7 08:00:00 2025   1.5  2.3 /Applications/WeChat.app/Contents/MacOS/WeChat
+  33066      1   205 _windowserver Tue Sep  2 09:15:03 2026   0.0  0.1 /usr/libexec/logd
+  40012  33066   501 leiyu Wed Jul 30 22:41:07 2026   0.4  0.8 /Applications/My App.app/Contents/MacOS/My App
+  50099      1   501 leiyu Fri Jan  2 03:04:05 2026   0.1  0.2 /usr/sbin/syslogd

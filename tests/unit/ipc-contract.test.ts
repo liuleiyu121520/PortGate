@@ -1,9 +1,9 @@
 /**
- * IPC 契约测试（方案 §4.2 / v1.2 m-05，阶段 1 建立、阶段 5 接入 port:history 时复验）：
+ * IPC 契约测试（方案 §4.2 / v1.2 m-05，阶段 1 建立并持续维护，阶段 5 接入 port:history 时复验）：
  * - ipc-contract.ts 为每个 channel 注释唯一职责（静态断言源码注释存在）；
  * - 各 channel 职责互不重叠（唯一职责描述两两不同）；
  * - 入参字段均有消费方（register.ts 源码引用）；
- * - settings:set 契约校验（scanInterval 仅接受 1000/2000/5000）与 CSP 定稿记录一致性。
+ * - 方向标注与桥方法对应；settings:set 契约校验与 CSP 定稿记录一致性。
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   IPC_CHANNEL_CONTRACTS,
   IPC_CHANNEL_WHITELIST,
+  normalizeRecordId,
   normalizeSettingsUpdate
 } from '../../src/shared/ipc-contract'
 import { CSP_DEV, CSP_PROD, SCAN_INTERVAL_OPTIONS, THEME_NAMES } from '../../src/shared/constants'
@@ -59,6 +60,24 @@ describe('IPC 契约：唯一职责注释与互不重叠（方案 §4.2 / m-05�
         ).toBe(true)
       }
     }
+  })
+
+  it('方向标注合法：invoke 通道为 R，推送通道为 P 且仅 port:events', () => {
+    for (const contract of IPC_CHANNEL_CONTRACTS) {
+      expect(['R', 'P']).toContain(contract.direction)
+      if (contract.direction === 'P') {
+        expect(contract.paramFields).toHaveLength(0)
+      }
+    }
+    const pushChannels = IPC_CHANNEL_CONTRACTS.filter((c) => c.direction === 'P').map((c) => c.channel)
+    expect(pushChannels).toEqual(['port:events'])
+  })
+
+  it('port:detail 入参契约：recordId 非空字符串，否则拒绝', () => {
+    expect(normalizeRecordId('TCP:127.0.0.1:5173:100')).toBe('TCP:127.0.0.1:5173:100')
+    expect(normalizeRecordId('')).toBeNull()
+    expect(normalizeRecordId(null)).toBeNull()
+    expect(normalizeRecordId(123)).toBeNull()
   })
 })
 

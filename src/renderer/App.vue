@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { theme as antdTheme } from 'ant-design-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import ThemeToggle from './components/ThemeToggle.vue'
+import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
 import { THEME_PALETTES } from './theme'
+import type { PortRecord } from '../shared/types'
 
 const settingsStore = useSettingsStore()
+const portsStore = usePortsStore()
 
 const palette = computed(() => THEME_PALETTES[settingsStore.theme])
 
@@ -25,37 +28,66 @@ const antdThemeConfig = computed(() => ({
   }
 }))
 
-interface StatItem {
-  label: string
-  value: number
-  exposed?: boolean
-}
-
-// 阶段 1 静态占位：统计条数值随阶段 2 port:list 接入后由 stores/ports 驱动
-const stats: StatItem[] = [
-  { label: 'Ports', value: 0 },
-  { label: 'TCP', value: 0 },
-  { label: 'UDP', value: 0 },
-  { label: 'Exposed', value: 0, exposed: true }
-]
+// 统计条（阶段 2 实时：来自 port:list 快照 + port:events 局部更新）
+const statsItems = computed(() => [
+  { label: 'Ports', value: portsStore.stats.total, exposed: false },
+  { label: 'TCP', value: portsStore.stats.tcp, exposed: false },
+  { label: 'UDP', value: portsStore.stats.udp, exposed: false },
+  { label: 'Exposed', value: portsStore.stats.exposed, exposed: true }
+])
 
 interface TableColumn {
   title: string
-  dataIndex: string
   key: string
   width?: number
 }
 
-// 阶段 1 静态骨架：列表列头按需求 §3，数据随阶段 2/3 接入
+// 阶段 2 极简列表（方案 §7：此时可用极简列表验证）；完整列与详情 Drawer 属阶段 3
 const columns: TableColumn[] = [
-  { title: 'PORT', dataIndex: 'port', key: 'port', width: 96 },
-  { title: 'PROCESS', dataIndex: 'process', key: 'process' },
-  { title: 'APP', dataIndex: 'app', key: 'app' },
-  { title: 'PROJECT', dataIndex: 'project', key: 'project' },
-  { title: 'ADDRESS', dataIndex: 'address', key: 'address' },
-  { title: 'UPTIME', dataIndex: 'uptime', key: 'uptime' },
-  { title: 'ACTION', dataIndex: 'action', key: 'action', width: 110 }
+  { title: 'PORT', key: 'port', width: 170 },
+  { title: 'PROCESS', key: 'process', width: 200 },
+  { title: 'ADDRESS', key: 'address', width: 230 },
+  { title: 'UPTIME', key: 'uptime' }
 ]
+
+const nowTick = ref(Date.now())
+let uptimeTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  // Uptime 每分钟重算展示（方案 §6）
+  uptimeTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 60000)
+})
+
+onUnmounted(() => {
+  if (uptimeTimer !== null) {
+    clearInterval(uptimeTimer)
+  }
+})
+
+function formatUptime(ms: number): string {
+  const safe = Math.max(ms, 0)
+  const totalSeconds = Math.floor(safe / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) {
+    return `${hours}h${minutes}m`
+  }
+  if (minutes > 0) {
+    return `${minutes}m${seconds}s`
+  }
+  return `${seconds}s`
+}
+
+function uptimeText(record: PortRecord): string {
+  return formatUptime(nowTick.value - record.timing.firstSeen)
+}
+
+function isExposed(record: PortRecord): boolean {
+  return record.localAddress !== '127.0.0.1' && record.localAddress !== '::1'
+}
 </script>
 
 <template>
@@ -69,9 +101,15 @@ const columns: TableColumn[] = [
           <h1 class="pg-brand__title">
             PortGate · 端口门禁
           </h1>
-          <span class="pg-brand__status">
-            <span class="pg-brand__dot" />
-            Monitoring
+          <span
+            class="pg-brand__status"
+            :class="{ 'pg-brand__status--error': portsStore.scanError !== null }"
+          >
+            <span
+              class="pg-brand__dot"
+              :class="{ 'pg-brand__dot--error': portsStore.scanError !== null }"
+            />
+            {{ portsStore.scanError !== null ? 'Scan Error' : 'Monitoring' }}
           </span>
         </div>
         <ThemeToggle />
@@ -112,7 +150,7 @@ const columns: TableColumn[] = [
 
       <div class="pg-stats">
         <span
-          v-for="stat in stats"
+          v-for="stat in statsItems"
           :key="stat.label"
           class="pg-stats__item"
           :class="{ 'pg-stats__item--exposed': stat.exposed }"
@@ -122,26 +160,47 @@ const columns: TableColumn[] = [
       </div>
 
       <div class="pg-content">
-        <a-tabs default-active-key="current">
-          <a-tab-pane
-            key="current"
-            tab="当前 (0)"
-          >
-            <a-table
-              :columns="columns"
-              :data-source="[]"
-              :pagination="false"
-              size="middle"
-              class="pg-table"
-            />
-          </a-tab-pane>
-          <a-tab-pane
-            key="history"
-            tab="历史 (0)"
-          >
-            <a-empty description="暂无历史会话（阶段 5 接入）" />
-          </a-tab-pane>
-        </a-tabs>
+        <a-table
+          :columns="columns"
+          :data-source="portsStore.records"
+          :pagination="false"
+          :loading="!portsStore.ready"
+          row-key="recordId"
+          size="middle"
+          class="pg-table"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'port'">
+              <a-tag
+                class="pg-proto-tag"
+                :class="record.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
+              >
+                {{ record.protocol }}
+              </a-tag>
+              <span class="pg-port-number">{{ record.localPort }}</span>
+              <a-tag
+                v-if="isExposed(record)"
+                class="pg-exposure-tag"
+              >
+                Exposed
+              </a-tag>
+            </template>
+            <template v-else-if="column.key === 'process'">
+              <span class="pg-process-name">{{ record.process.name }}</span>
+              <span class="pg-process-pid"> · {{ record.pid }}</span>
+            </template>
+            <template v-else-if="column.key === 'address'">
+              <span>{{ record.localAddress }}:{{ record.localPort }}</span>
+              <span
+                v-if="record.state"
+                class="pg-address-state"
+              > · {{ record.state }}</span>
+            </template>
+            <template v-else-if="column.key === 'uptime'">
+              <span>{{ uptimeText(record) }}</span>
+            </template>
+          </template>
+        </a-table>
       </div>
     </div>
   </a-config-provider>
@@ -190,6 +249,10 @@ const columns: TableColumn[] = [
     height: 8px;
     border-radius: 50%;
     background-color: var(--pg-success);
+  }
+
+  &__dot--error {
+    background-color: var(--pg-danger);
   }
 }
 
@@ -254,5 +317,34 @@ const columns: TableColumn[] = [
 .pg-content {
   flex: 1;
   min-height: 0;
+}
+
+.pg-proto-tag--tcp {
+  color: var(--pg-accent);
+  border-color: var(--pg-accent);
+}
+
+.pg-proto-tag--udp {
+  color: var(--pg-success);
+  border-color: var(--pg-success);
+}
+
+.pg-port-number {
+  margin: 0 4px;
+  font-weight: 600;
+}
+
+.pg-exposure-tag {
+  color: var(--pg-warning);
+  border-color: var(--pg-warning);
+}
+
+.pg-process-pid {
+  color: var(--pg-muted);
+}
+
+.pg-address-state {
+  color: var(--pg-muted);
+  font-size: 12px;
 }
 </style>

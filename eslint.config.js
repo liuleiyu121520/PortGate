@@ -42,6 +42,15 @@ module.exports = (async () => {
     ...tseslint.configs.recommended,
     ...pluginVue.configs['flat/recommended'],
     {
+      name: 'portgate/unused-vars',
+      rules: {
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
+        ]
+      }
+    },
+    {
       name: 'portgate/vue-ts-parser',
       files: ['src/renderer/**/*.vue'],
       languageOptions: {

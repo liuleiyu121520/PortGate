@@ -6,6 +6,7 @@ import './styles/themes.less'
 import './styles/base.less'
 import App from './App.vue'
 import { useSettingsStore } from './stores/settings'
+import { usePortsStore } from './stores/ports'
 
 async function bootstrap(): Promise<void> {
   const app = createApp(App)
@@ -14,6 +15,9 @@ async function bootstrap(): Promise<void> {
 
   const settingsStore = useSettingsStore()
   await settingsStore.init()
+
+  const portsStore = usePortsStore()
+  await portsStore.init()
 
   if (import.meta.env.DEV) {
     // dev 冒烟探针挂载点：main 进程 executeJavaScript 经真实 store 切换主题（见 src/main/index.ts）

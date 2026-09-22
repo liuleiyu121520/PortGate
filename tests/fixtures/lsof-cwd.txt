@@ -1,0 +1,3 @@
+p81234\0n/Users/leiyu/code/github/PortGate\0
+p33066\0n/private/var/db/diagnostics\0
+p40012\0n/Applications/My App.app/Contents/Resources\0

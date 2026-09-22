@@ -1,9 +1,16 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import { registerIpcHandlers } from './ipc/register'
+import type { PortgateServices } from './ipc/register'
 import { runSqliteSmoke } from './db/smoke'
+import { createAdapter } from './platform/factory'
+import { ProcessResolver } from './core/resolve/ProcessResolver'
+import { PortManager } from './core/port/PortManager'
+import { PortScanner } from './core/port/PortScanner'
+import { runPhase2Probe } from './dev/probe'
+import type { PortEvent } from '../shared/types'
 
-/** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验） */
+/** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验；不启动周期扫描，由探针手动驱动） */
 const SMOKE_MODE = process.env.PORTGATE_SMOKE === '1'
 const isDev = !app.isPackaged
 
@@ -11,6 +18,42 @@ let mainWindow: BrowserWindow | null = null
 
 function log(line: string): void {
   console.log(`[portgate] ${line}`)
+}
+
+/** 主进程 → renderer 事件广播（P 通道 port:events 的发送侧） */
+function broadcastPortEvent(event: PortEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('port:events', event)
+    }
+  }
+}
+
+// ---- 扫描数据通路组装（方案 §10：PlatformAdapter → PortScanner → MemoryStore → Renderer） ----
+const adapter = createAdapter()
+const resolver = new ProcessResolver()
+const portManager = new PortManager(adapter, resolver)
+const scanner = new PortScanner(portManager, (result) => {
+  if (result.error !== null) {
+    broadcastPortEvent({ type: 'SCAN_ERROR', payload: { message: result.error } })
+    return
+  }
+  if (result.events.length > 0) {
+    broadcastPortEvent({ type: 'DIFF', payload: { events: result.events } })
+  }
+  if (result.pushSnapshot) {
+    broadcastPortEvent({
+      type: 'SNAPSHOT',
+      payload: { records: result.records, stats: result.stats }
+    })
+  }
+})
+
+const services: PortgateServices = {
+  listSnapshot: () => portManager.listSnapshot(),
+  findRecord: (recordId) => portManager.findRecord(recordId),
+  requestRefresh: () => scanner.requestRefresh(),
+  applyScanInterval: (intervalMs) => scanner.updateInterval(intervalMs)
 }
 
 function createWindow(): void {
@@ -67,7 +110,7 @@ async function verifyDevSmoke(): Promise<void> {
     if (SMOKE_MODE) {
       app.quit()
     }
-  }, 15000)
+  }, 20000)
 
   const probe = `(() => new Promise((resolve) => {
     setTimeout(async () => {
@@ -122,14 +165,14 @@ async function verifyDevSmoke(): Promise<void> {
     log(`[D-2] renderer smoke 执行失败 — ${error instanceof Error ? error.message : String(error)}`)
   } finally {
     if (SMOKE_MODE) {
-      setTimeout(() => app.quit(), 500)
+      setTimeout(() => app.quit(), 1500)
     }
   }
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers()
-  log('IPC 白名单通道注册完成（settings:get / settings:set）')
+  registerIpcHandlers(services)
+  log('IPC 白名单通道注册完成（settings:get/set + port:list/detail/refresh/events）')
 
   if (isDev) {
     // D-1 判据 A（方案 §11）：Electron 主进程内 better-sqlite3 真实读写 smoke
@@ -139,6 +182,13 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  if (SMOKE_MODE) {
+    // 阶段 2 真机核对（M-01）：手动驱动扫描轮，避免与周期扫描竞态
+    void runPhase2Probe(portManager)
+  } else {
+    scanner.start()
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -147,5 +197,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  scanner.stop()
   app.quit()
 })

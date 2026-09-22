@@ -1,0 +1,1 @@
+  33066      1   205 _windowserver Tue Sep  2 09:15:03 2026   0.0  0.1 /usr/libexec/log

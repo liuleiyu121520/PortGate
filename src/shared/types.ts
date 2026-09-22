@@ -1,8 +1,12 @@
 /**
- * PortGate 共享类型（方案 §5.1：数据模型按需求 §8 定义）。
- * 阶段 1 仅落设置域类型；PortRecord 等端口数据模型随阶段 2 平台数据通路一并引入，
- * 避免投机定义（方案 §5.14 同款裁量口径）。
+ * PortGate 共享类型。
+ * - 数据模型（PortRecord/ProcessInfo/ApplicationInfo/ProjectInfo）按需求 §8 原样定义（方案 §5.1）；
+ * - TimingInfo/SecurityInfo/RuntimeInfo/ContainerInfo 需求 §8 仅在 PortRecord 中引用未给定义块，
+ *   按方案 §5.1/§5.14/§5.15 语义最小定义；
+ * - 设置域类型（阶段 1）保持不变。
  */
+
+/* ---------------------------------- 设置域（阶段 1） ---------------------------------- */
 
 /** 扫描周期（需求 §19：仅允许 1000/2000/5000） */
 export type ScanInterval = 1000 | 2000 | 5000
@@ -27,5 +31,143 @@ export interface SettingsUpdateParams {
 
 /** settings:set 出参（方案 §4.2：{ ok }） */
 export interface SettingsSetResult {
+  ok: boolean
+}
+
+/* ------------------------------ 核心数据模型（需求 §8） ------------------------------ */
+
+/** 时间字段（需求 §6 语义：firstSeen=First Seen，lastSeen=Last Seen ≠ Last Active） */
+export interface TimingInfo {
+  firstSeen: number
+  lastSeen: number
+}
+
+/** 保护级（需求 §16：完整判定规则属阶段 4 SecurityClassifier；阶段 2 组装固定 UNKNOWN） */
+export type SecurityLevel = 'USER' | 'SYSTEM' | 'SYSTEM_CRITICAL' | 'UNKNOWN'
+
+export interface SecurityInfo {
+  level: SecurityLevel
+}
+
+/** 运行时资源占用（方案 §5.15 / R-05：来自 ps 全表，可选增强，不入 AC） */
+export interface RuntimeInfo {
+  cpuPercent: number
+  memPercent: number
+}
+
+/** 容器关联（R-04：V1 仅尽力关联，阶段 4 DockerResolver 接入） */
+export interface ContainerInfo {
+  name?: string
+  image?: string
+}
+
+/**
+ * 进程信息（需求 §8 ProcessInfo 原样；字段位全保留，
+ * application/project 阶段 4 Resolver 接入前为 undefined——R-03 字段位保留口径）
+ */
+export interface ProcessInfo {
+  pid: number
+  ppid?: number
+  name: string
+  executablePath?: string
+  commandLine?: string
+  arguments?: string[]
+  workingDirectory?: string
+  user?: string
+  uid?: number
+  architecture?: string
+  startedAt?: number
+}
+
+/** 应用信息（需求 §8 原样；阶段 4 ApplicationResolver 接入） */
+export interface ApplicationInfo {
+  name: string
+  bundleId?: string
+  path?: string
+  icon?: string
+  sourcePid?: number
+}
+
+/** 项目信息（需求 §8 原样；阶段 4 ProjectResolver 接入） */
+export interface ProjectInfo {
+  name?: string
+  path?: string
+  type?: string
+  marker?: string
+}
+
+/**
+ * 核心端口记录（需求 §8 PortRecord 原样；其中需求字段 `id` 按方案 §5.1 定名为
+ * recordId，复合键：`${protocol}:${localAddress}:${localPort}:${pid}`，进程绑定身份）
+ */
+export interface PortRecord {
+  recordId: string
+  protocol: 'TCP' | 'UDP'
+  localAddress: string
+  localPort: number
+  remoteAddress?: string
+  remotePort?: number
+  state?: string
+  pid: number
+  process: ProcessInfo
+  application?: ApplicationInfo
+  project?: ProjectInfo
+  container?: ContainerInfo
+  timing: TimingInfo
+  security: SecurityInfo
+  runtime?: RuntimeInfo
+}
+
+/** 统计条计数（需求 §3 / 方案 §4.2：{ total, tcp, udp, exposed }，口径同源 exposure.ts） */
+export interface PortStats {
+  total: number
+  tcp: number
+  udp: number
+  exposed: number
+}
+
+/* ------------------------------- IPC 事件与载荷（§19） ------------------------------- */
+
+export type DiffEventType = 'PORT_OPENED' | 'PORT_CLOSED' | 'PORT_CHANGED' | 'PROCESS_CHANGED'
+
+/** 单条差异事件：record 为事件后相关记录的最新态（CLOSED 时为消失前记录，供 renderer 移除） */
+export interface DiffEvent {
+  type: DiffEventType
+  groupKey: string
+  recordId: string
+  /** PROCESS_CHANGED 时指同端口被替换的旧记录（renderer 先删旧再插新，局部更新不整表刷新） */
+  prevRecordId?: string
+  record: PortRecord
+}
+
+export type PortEventType = 'SNAPSHOT' | 'DIFF' | 'SCAN_ERROR'
+
+export interface PortSnapshotPayload {
+  records: PortRecord[]
+  stats: PortStats
+}
+
+export interface PortDiffPayload {
+  events: DiffEvent[]
+}
+
+export interface PortScanErrorPayload {
+  message: string
+}
+
+/** port:events 推送载荷（方案 §4.2：{ type: 'SNAPSHOT'|'DIFF'|'SCAN_ERROR', payload }） */
+export type PortEvent =
+  | { type: 'SNAPSHOT'; payload: PortSnapshotPayload }
+  | { type: 'DIFF'; payload: PortDiffPayload }
+  | { type: 'SCAN_ERROR'; payload: PortScanErrorPayload }
+
+/** port:list 出参（方案 §4.2：仅当前快照；历史检索一律走 port:history，v1.2 m-05） */
+export interface PortListResult {
+  records: PortRecord[]
+  stats: PortStats
+}
+
+/** port:refresh 出参（方案 §4.2：{ ok }，触发一次去抖立即扫描） */
+export interface PortRefreshResult {
   ok: boolean
 }
