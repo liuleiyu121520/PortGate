@@ -1,0 +1,151 @@
+import { join } from 'node:path'
+import { app, BrowserWindow, nativeTheme } from 'electron'
+import { registerIpcHandlers } from './ipc/register'
+import { runSqliteSmoke } from './db/smoke'
+
+/** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验） */
+const SMOKE_MODE = process.env.PORTGATE_SMOKE === '1'
+const isDev = !app.isPackaged
+
+let mainWindow: BrowserWindow | null = null
+
+function log(line: string): void {
+  console.log(`[portgate] ${line}`)
+}
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    minWidth: 960,
+    minHeight: 600,
+    title: 'PortGate · 端口门禁',
+    show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191D' : '#F6F7F9',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
+  })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.show()
+    log('[D-2] BrowserWindow ready-to-show，窗口已显示')
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (isDev) {
+      void verifyDevSmoke()
+    }
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
+  const rendererUrl = process.env['ELECTRON_RENDERER_URL']
+  if (rendererUrl) {
+    void mainWindow.loadURL(rendererUrl)
+  } else {
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+/**
+ * dev 冒烟探针（仅 dev 执行）：经真实 preload 桥 + Pinia store 切换主题，
+ * 核验 D-2 三要素（preload 桥可用 / 主题切换生效 / antd 组件在 CSP 下正常渲染）。
+ */
+async function verifyDevSmoke(): Promise<void> {
+  if (!mainWindow) {
+    return
+  }
+  const probeTimeout = setTimeout(() => {
+    log('[D-2] renderer smoke 超时：FAIL')
+    if (SMOKE_MODE) {
+      app.quit()
+    }
+  }, 15000)
+
+  const probe = `(() => new Promise((resolve) => {
+    setTimeout(async () => {
+      try {
+        const html = document.documentElement
+        const themeBefore = html.dataset.theme || 'unset'
+        const antdRendered = Boolean(
+          document.querySelector('.ant-table') && document.querySelector('.ant-switch')
+        )
+        const bridge = window.portgate
+        const smoke = window.__portgateDevSmoke
+        if (!bridge || !smoke) {
+          resolve({ ok: false, reason: 'preload 桥或 dev smoke 挂载点缺失' })
+          return
+        }
+        const target = themeBefore === 'dark' ? 'light' : 'dark'
+        const setOk = await smoke.settings.setTheme(target)
+        const themeAfter = html.dataset.theme || 'unset'
+        // 等 0.2s 背景过渡动画结束后再取样，确保读到切换后的真实背景色
+        await new Promise((r) => setTimeout(r, 400))
+        const bodyBg = getComputedStyle(document.body).backgroundColor
+        await smoke.settings.setTheme(themeBefore === 'unset' ? 'light' : themeBefore)
+        resolve({ ok: true, antdRendered, themeBefore, themeAfter, setOk, bodyBg })
+      } catch (error) {
+        resolve({ ok: false, reason: String(error) })
+      }
+    }, 800)
+  }))()`
+
+  try {
+    const result = (await mainWindow.webContents.executeJavaScript(probe, true)) as {
+      ok: boolean
+      antdRendered?: boolean
+      themeBefore?: string
+      themeAfter?: string
+      setOk?: boolean
+      bodyBg?: string
+      reason?: string
+    }
+    clearTimeout(probeTimeout)
+    if (result.ok) {
+      log(
+        `[D-2] preload 桥可用；主题切换 ${result.themeBefore} -> ${result.themeAfter} ` +
+          `${result.setOk ? '生效' : '未生效'}；antd 组件渲染 ${result.antdRendered ? '正常' : '异常'}；` +
+          `body bg = ${result.bodyBg}`
+      )
+    } else {
+      log(`[D-2] renderer smoke FAIL — ${result.reason ?? '未知原因'}`)
+    }
+  } catch (error) {
+    clearTimeout(probeTimeout)
+    log(`[D-2] renderer smoke 执行失败 — ${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    if (SMOKE_MODE) {
+      setTimeout(() => app.quit(), 500)
+    }
+  }
+}
+
+app.whenReady().then(() => {
+  registerIpcHandlers()
+  log('IPC 白名单通道注册完成（settings:get / settings:set）')
+
+  if (isDev) {
+    // D-1 判据 A（方案 §11）：Electron 主进程内 better-sqlite3 真实读写 smoke
+    const smoke = runSqliteSmoke()
+    log(`[D-1A] better-sqlite3 Electron 侧读写 smoke：${smoke.ok ? 'PASS' : 'FAIL'} — ${smoke.detail}`)
+  }
+
+  createWindow()
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
+  })
+})
+
+app.on('window-all-closed', () => {
+  app.quit()
+})

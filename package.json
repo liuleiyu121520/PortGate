@@ -1,0 +1,46 @@
+{
+  "name": "portgate",
+  "version": "0.0.1",
+  "description": "本机端口、进程、应用、项目之间的可视化监控与安全管理工具",
+  "main": "out/main/index.js",
+  "private": true,
+  "author": {
+    "name": "PortGate"
+  },
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "ant-design-vue": "^4.2.6",
+    "better-sqlite3": "~13.0.3",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.18.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "@vue/test-utils": "^2.5.1",
+    "electron": "~44.4.3",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-vue": "^10.11.0",
+    "happy-dom": "^20.14.5",
+    "less": "^4.9.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.1",
+    "vue-tsc": "^3.3.11"
+  }
+}

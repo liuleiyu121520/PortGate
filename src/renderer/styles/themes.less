@@ -1,0 +1,33 @@
+// CSS custom properties 双主题作用域（方案 §6：Less 变量构建期生成 CSS custom properties）。
+// 默认 :root 为 Cloud Slate（light），<html data-theme="dark"> 时切换 Midnight Slate。
+// 变量表经 electron.vite.config.ts 的 less additionalData 注入。
+
+:root {
+  --pg-background: @cloud-background;
+  --pg-surface: @cloud-surface;
+  --pg-surface-2: @cloud-surface-2;
+  --pg-border: @cloud-border;
+  --pg-text: @cloud-text;
+  --pg-secondary: @cloud-secondary;
+  --pg-muted: @cloud-muted;
+  --pg-accent: @cloud-accent;
+  --pg-success: @cloud-success;
+  --pg-warning: @cloud-warning;
+  --pg-danger: @cloud-danger;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --pg-background: @midnight-background;
+  --pg-surface: @midnight-surface;
+  --pg-surface-2: @midnight-surface-2;
+  --pg-border: @midnight-border;
+  --pg-text: @midnight-text;
+  --pg-secondary: @midnight-secondary;
+  --pg-muted: @midnight-muted;
+  --pg-accent: @midnight-accent;
+  --pg-success: @midnight-success;
+  --pg-warning: @midnight-warning;
+  --pg-danger: @midnight-danger;
+  color-scheme: dark;
+}

@@ -1,0 +1,29 @@
+# electron-builder 基础配置（阶段 1 就位，本阶段不出包；打包/CI 主体在阶段 6）
+appId: com.portgate.app
+productName: PortGate
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+# better-sqlite3@13 为包内 N-API 通用预编译二进制（方案 §3.4）：无 rebuild 环节，
+# 仅需保证 .node / prebuilds 在 asar 外可被 require。
+npmRebuild: false
+asarUnpack:
+  - "**/*.node"
+  - "**/prebuilds/**"
+  - "node_modules/better-sqlite3/**"
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage
+    - deb

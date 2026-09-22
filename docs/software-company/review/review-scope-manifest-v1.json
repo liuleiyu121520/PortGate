@@ -1,0 +1,55 @@
+{
+  "schema_version": "review_scope_manifest_v1",
+  "parent_task_id": "portgate-v1.1-plan-review",
+  "scope_version": 3,
+  "entries": [
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/prd/portgate-requirements-v1.1.md",
+      "type": "requirement",
+      "mode": "0o644",
+      "sha256": "2ee93772051e159204209d978a7ca456a17d9f8e59e2422c6f65cdaa7f531e3d",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/prd/prd-ready-record-v1.md",
+      "type": "requirement_record",
+      "mode": "0o644",
+      "sha256": "763ccc84f6e8a525bdda4d7b30519bce1003508edd6bad85fdaca772236dfd48",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/plans/portgate-plan-v1.md",
+      "type": "plan_under_review",
+      "mode": "0o644",
+      "sha256": "020564af754f6370886ca903075d6666c49f742407baafafb3d0e3e73d18adb8",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/README.md",
+      "type": "project_fact",
+      "mode": "0o644",
+      "sha256": "1391310be02b797bd3697f48f00252ac48833671eda1247876fd7838537a976c",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/.gitignore",
+      "type": "project_fact",
+      "mode": "0o644",
+      "sha256": "ae3ac05cd16b0f6c4251fd30d74c12866d1ba6daa365aacc2e32ddfc09a478f6",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/LICENSE",
+      "type": "project_fact",
+      "mode": "0o644",
+      "sha256": "aa4303f6fb6a12c1298f59881fe91cf0471a1c95c7ccde585573f7dcc83431fd",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    }
+  ]
+}
