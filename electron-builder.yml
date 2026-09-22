@@ -21,14 +21,15 @@ mac:
         - arm64
         - x64
   category: public.app-category.developer-tools
-  icon: build/icon.png
+  # D-3 ICON-ARRIVAL：正式图标多尺寸导出（iconset 16~1024 + @2x）
+  icon: build/icon.icns
   # m-07：固定未签名口径——有/无证书机器状态均不被自动签名（R-7/R-8，V1 不签名不公证）
   identity: null
   # 本地/CI 侧再辅以 CSC_IDENTITY_AUTO_DISCOVERY=false（CI workflow 与 README 打包命令）
 win:
   target:
     - nsis
-  icon: build/icon.png
+  icon: build/icon.ico
 linux:
   target:
     - AppImage
