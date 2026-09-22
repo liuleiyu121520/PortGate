@@ -73,8 +73,8 @@ export const IPC_CHANNEL_CONTRACTS: readonly IpcChannelContract[] = [
   {
     channel: IPC_CHANNELS.PORT_LIST,
     direction: 'R',
-    responsibility: '拉取当前端口快照全量（records+stats），供首载与按需全量刷新，不做历史检索',
-    paramFields: []
+    responsibility: '拉取当前端口快照（records+stats+搜索命中区间），按 query 过滤排序，不做历史检索',
+    paramFields: ['query']
   },
   {
     channel: IPC_CHANNELS.PORT_DETAIL,
@@ -149,11 +149,24 @@ export function normalizeRecordId(raw: unknown): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null
 }
 
+/**
+ * 校验 port:list 入参（契约级：{ query?: string }，v1.2 m-05——仅 query，无 tab 参数）。
+ * 缺省/非法载荷一律返回空串（= 全量快照）。
+ */
+export function normalizeListQuery(raw: unknown): string {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return ''
+  }
+  const query = (raw as Record<string, unknown>).query
+  return typeof query === 'string' ? query : ''
+}
+
 /** window.portgate 暴露的桥 API（preload 实现，renderer 仅经此访问；与白名单一一对应） */
 export interface PortgateApi {
   getSettings(): Promise<SettingsSnapshot>
   setSettings(params: SettingsUpdateParams): Promise<SettingsSetResult>
-  getPortList(): Promise<PortListResult>
+  /** query 为空串 = 全量快照（端口升序）；非空 = 搜索结果（score 降序） */
+  getPortList(query?: string): Promise<PortListResult>
   getPortDetail(recordId: string): Promise<PortRecord | null>
   refreshPorts(): Promise<PortRefreshResult>
   /** 订阅主进程推送（P 通道）；返回退订函数 */

@@ -1,7 +1,7 @@
 {
   "schema_version": "review_scope_manifest_v1",
   "parent_task_id": "portgate-v1.1-plan-review",
-  "scope_version": 3,
+  "scope_version": 4,
   "entries": [
     {
       "path": "/Users/leiyu/code/github/PortGate/docs/software-company/prd/portgate-requirements-v1.1.md",
@@ -23,7 +23,7 @@
       "path": "/Users/leiyu/code/github/PortGate/docs/software-company/plans/portgate-plan-v1.md",
       "type": "plan_under_review",
       "mode": "0o644",
-      "sha256": "020564af754f6370886ca903075d6666c49f742407baafafb3d0e3e73d18adb8",
+      "sha256": "908fb08376a60c3ff62203c603f48de6795992084d2bd0991637297e024a2646",
       "symlink": false,
       "secret_status": "CLEAR"
     },

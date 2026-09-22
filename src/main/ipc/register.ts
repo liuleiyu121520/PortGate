@@ -9,6 +9,7 @@ import { ipcMain, nativeTheme } from 'electron'
 import { DEFAULT_SCAN_INTERVAL } from '../../shared/constants'
 import {
   IPC_CHANNELS,
+  normalizeListQuery,
   normalizeRecordId,
   normalizeSettingsUpdate
 } from '../../shared/ipc-contract'
@@ -16,8 +17,15 @@ import type { PortRefreshResult, SettingsSetResult, SettingsSnapshot } from '../
 
 /** 主进程组装层注入的服务面（由 src/main/index.ts 装配） */
 export interface PortgateServices {
-  /** 当前端口快照（records 已按端口升序 + stats 口径同源） */
-  listSnapshot: () => { records: unknown[]; stats: { total: number; tcp: number; udp: number; exposed: number } }
+  /**
+   * 当前端口快照（records 已由主进程排序：空 query 端口升序 / 搜索 score 降序；
+   * stats 恒为全量口径；matches 附带搜索命中区间）
+   */
+  listSnapshot: (query?: string) => {
+    records: unknown[]
+    stats: { total: number; tcp: number; udp: number; exposed: number }
+    matches: Record<string, unknown>
+  }
   /** 按 recordId 查单条记录；不存在返回 null */
   findRecord: (recordId: string) => unknown
   /** 触发一次去抖立即扫描 */
@@ -50,7 +58,9 @@ export function registerIpcHandlers(services: PortgateServices): void {
     return { ok: true }
   })
 
-  ipcMain.handle(IPC_CHANNELS.PORT_LIST, () => services.listSnapshot())
+  ipcMain.handle(IPC_CHANNELS.PORT_LIST, (_event, raw: unknown) =>
+    services.listSnapshot(normalizeListQuery(raw))
+  )
 
   ipcMain.handle(IPC_CHANNELS.PORT_DETAIL, (_event, raw: unknown): unknown => {
     const recordId = normalizeRecordId(raw)

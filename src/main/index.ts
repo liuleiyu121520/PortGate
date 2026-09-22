@@ -7,7 +7,7 @@ import { createAdapter } from './platform/factory'
 import { ProcessResolver } from './core/resolve/ProcessResolver'
 import { PortManager } from './core/port/PortManager'
 import { PortScanner } from './core/port/PortScanner'
-import { runPhase2Probe } from './dev/probe'
+import { runPhase2Probe, runPhase3Probe } from './dev/probe'
 import type { PortEvent } from '../shared/types'
 
 /** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验；不启动周期扫描，由探针手动驱动） */
@@ -50,7 +50,7 @@ const scanner = new PortScanner(portManager, (result) => {
 })
 
 const services: PortgateServices = {
-  listSnapshot: () => portManager.listSnapshot(),
+  listSnapshot: (query = '') => portManager.listSnapshot(query),
   findRecord: (recordId) => portManager.findRecord(recordId),
   requestRefresh: () => scanner.requestRefresh(),
   applyScanInterval: (intervalMs) => scanner.updateInterval(intervalMs)
@@ -163,11 +163,8 @@ async function verifyDevSmoke(): Promise<void> {
   } catch (error) {
     clearTimeout(probeTimeout)
     log(`[D-2] renderer smoke 执行失败 — ${error instanceof Error ? error.message : String(error)}`)
-  } finally {
-    if (SMOKE_MODE) {
-      setTimeout(() => app.quit(), 1500)
-    }
   }
+  // SMOKE 模式的退出由探针链收口（见 whenReady），此处不再提前退出
 }
 
 app.whenReady().then(() => {
@@ -183,8 +180,15 @@ app.whenReady().then(() => {
   createWindow()
 
   if (SMOKE_MODE) {
-    // 阶段 2 真机核对（M-01）：手动驱动扫描轮，避免与周期扫描竞态
+    // 阶段 2/3 真机核对（M-01 + M-04 第一段）：手动驱动扫描轮，避免与周期扫描竞态；完成后探针链收口退出
     void runPhase2Probe(portManager)
+      .then(() => runPhase3Probe(portManager))
+      .catch((error: unknown) => {
+        log(`[SMOKE] probe chain aborted — ${error instanceof Error ? error.message : String(error)}`)
+      })
+      .finally(() => {
+        setTimeout(() => app.quit(), 500)
+      })
   } else {
     scanner.start()
   }

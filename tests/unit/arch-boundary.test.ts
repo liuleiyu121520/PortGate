@@ -76,6 +76,13 @@ describe('业务层平台能力收敛（AC-16 / §8.1 架构守护）', () => {
       expect(source).not.toMatch(/from\s+['"](fs|path|os|crypto|child_process|net|http)['"]/)
     }
   })
+
+  it('HighlightText 是唯一高亮实现（<mark> 仅存在于该组件，需求 §4.4）', () => {
+    const rendererFiles = walkSources(resolve(PROJECT_ROOT, 'src/renderer'))
+    const markFiles = rendererFiles.filter((file) => readFileSync(file, 'utf-8').includes('<mark'))
+    expect(markFiles).toHaveLength(1)
+    expect(markFiles[0].endsWith('HighlightText.vue')).toBe(true)
+  })
 })
 
 describe('适配器工厂平台分发（需求 §13 / R-01）', () => {

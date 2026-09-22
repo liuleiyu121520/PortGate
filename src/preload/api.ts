@@ -54,7 +54,8 @@ export function createPortgateApi(bridge: IpcBridge): PortgateApi {
     getSettings: () => guardedInvoke(PORTGATE_METHODS.getSettings) as Promise<SettingsSnapshot>,
     setSettings: (params: SettingsUpdateParams) =>
       guardedInvoke(PORTGATE_METHODS.setSettings, params) as Promise<SettingsSetResult>,
-    getPortList: () => guardedInvoke(PORTGATE_METHODS.getPortList) as Promise<PortListResult>,
+    getPortList: (query = '') =>
+      guardedInvoke(PORTGATE_METHODS.getPortList, { query }) as Promise<PortListResult>,
     getPortDetail: (recordId: string) =>
       guardedInvoke(PORTGATE_METHODS.getPortDetail, recordId) as Promise<PortRecord | null>,
     refreshPorts: () =>

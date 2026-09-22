@@ -2,11 +2,15 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { theme as antdTheme } from 'ant-design-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import DetailDrawer from './components/DetailDrawer.vue'
+import HighlightText from './components/HighlightText.vue'
+import SearchBar from './components/SearchBar.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
 import { THEME_PALETTES } from './theme'
-import type { PortRecord } from '../shared/types'
+import type { HighlightRange, PortRecord } from '../shared/types'
+import { formatDuration } from './utils/format'
 
 const settingsStore = useSettingsStore()
 const portsStore = usePortsStore()
@@ -28,7 +32,7 @@ const antdThemeConfig = computed(() => ({
   }
 }))
 
-// 统计条（阶段 2 实时：来自 port:list 快照 + port:events 局部更新）
+// 统计条（全量口径，不随搜索变化；来自 port:list stats / 非搜索态本地同口径重算）
 const statsItems = computed(() => [
   { label: 'Ports', value: portsStore.stats.total, exposed: false },
   { label: 'TCP', value: portsStore.stats.tcp, exposed: false },
@@ -36,19 +40,39 @@ const statsItems = computed(() => [
   { label: 'Exposed', value: portsStore.stats.exposed, exposed: true }
 ])
 
+const activeTab = ref<'current' | 'history'>('current')
+const currentCount = computed(() => portsStore.records.length)
+
 interface TableColumn {
   title: string
   key: string
   width?: number
 }
 
-// 阶段 2 极简列表（方案 §7：此时可用极简列表验证）；完整列与详情 Drawer 属阶段 3
+// 列头按需求 §3：PORT/PROCESS/APP/PROJECT/ADDRESS/UPTIME/ACTION
 const columns: TableColumn[] = [
   { title: 'PORT', key: 'port', width: 170 },
-  { title: 'PROCESS', key: 'process', width: 200 },
-  { title: 'ADDRESS', key: 'address', width: 230 },
-  { title: 'UPTIME', key: 'uptime' }
+  { title: 'PROCESS', key: 'process', width: 170 },
+  { title: 'APP', key: 'app', width: 110 },
+  { title: 'PROJECT', key: 'project', width: 130 },
+  { title: 'ADDRESS', key: 'address', width: 200 },
+  { title: 'UPTIME', key: 'uptime', width: 100 },
+  { title: 'ACTION', key: 'action' }
 ]
+
+const drawerOpen = ref(false)
+const drawerRecordId = ref<string | null>(null)
+const drawerRecord = computed<PortRecord | null>(
+  () => portsStore.records.find((record) => record.recordId === drawerRecordId.value) ?? null
+)
+const drawerMatch = computed(() =>
+  drawerRecordId.value === null ? undefined : portsStore.matches[drawerRecordId.value]
+)
+
+function openDrawer(record: PortRecord): void {
+  drawerRecordId.value = record.recordId
+  drawerOpen.value = true
+}
 
 const nowTick = ref(Date.now())
 let uptimeTimer: ReturnType<typeof setInterval> | null = null
@@ -66,27 +90,16 @@ onUnmounted(() => {
   }
 })
 
-function formatUptime(ms: number): string {
-  const safe = Math.max(ms, 0)
-  const totalSeconds = Math.floor(safe / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  if (hours > 0) {
-    return `${hours}h${minutes}m`
-  }
-  if (minutes > 0) {
-    return `${minutes}m${seconds}s`
-  }
-  return `${seconds}s`
-}
-
 function uptimeText(record: PortRecord): string {
-  return formatUptime(nowTick.value - record.timing.firstSeen)
+  return formatDuration(nowTick.value - record.timing.firstSeen)
 }
 
 function isExposed(record: PortRecord): boolean {
   return record.localAddress !== '127.0.0.1' && record.localAddress !== '::1'
+}
+
+function rangesOf(record: PortRecord, field: string): HighlightRange[] {
+  return (portsStore.matches[record.recordId]?.highlights[field] ?? []) as HighlightRange[]
 }
 </script>
 
@@ -115,38 +128,7 @@ function isExposed(record: PortRecord): boolean {
         <ThemeToggle />
       </header>
 
-      <div class="pg-search">
-        <svg
-          class="pg-search__icon"
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx="7"
-            cy="7"
-            r="4.5"
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
-          <path
-            d="M10.6 10.6 14 14"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-          />
-        </svg>
-        <input
-          class="pg-search__input"
-          type="text"
-          placeholder="搜索端口、PID、进程、应用、项目、路径、命令…"
-        >
-        <kbd class="pg-search__kbd">
-          ⌘K
-        </kbd>
-      </div>
+      <SearchBar @search="portsStore.setQuery" />
 
       <div class="pg-stats">
         <span
@@ -160,48 +142,113 @@ function isExposed(record: PortRecord): boolean {
       </div>
 
       <div class="pg-content">
-        <a-table
-          :columns="columns"
-          :data-source="portsStore.records"
-          :pagination="false"
-          :loading="!portsStore.ready"
-          row-key="recordId"
-          size="middle"
-          class="pg-table"
+        <a-tabs
+          v-model:active-key="activeTab"
+          size="small"
         >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'port'">
-              <a-tag
-                class="pg-proto-tag"
-                :class="record.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
-              >
-                {{ record.protocol }}
-              </a-tag>
-              <span class="pg-port-number">{{ record.localPort }}</span>
-              <a-tag
-                v-if="isExposed(record)"
-                class="pg-exposure-tag"
-              >
-                Exposed
-              </a-tag>
-            </template>
-            <template v-else-if="column.key === 'process'">
-              <span class="pg-process-name">{{ record.process.name }}</span>
-              <span class="pg-process-pid"> · {{ record.pid }}</span>
-            </template>
-            <template v-else-if="column.key === 'address'">
-              <span>{{ record.localAddress }}:{{ record.localPort }}</span>
-              <span
-                v-if="record.state"
-                class="pg-address-state"
-              > · {{ record.state }}</span>
-            </template>
-            <template v-else-if="column.key === 'uptime'">
-              <span>{{ uptimeText(record) }}</span>
-            </template>
-          </template>
-        </a-table>
+          <a-tab-pane
+            key="current"
+            :tab="`当前 (${currentCount})`"
+          >
+            <a-table
+              :columns="columns"
+              :data-source="portsStore.records"
+              :pagination="false"
+              :loading="!portsStore.ready"
+              row-key="recordId"
+              size="middle"
+              class="pg-table"
+              :custom-row="(record: PortRecord) => ({ onClick: () => openDrawer(record), class: 'pg-table__row' })"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'port'">
+                  <a-tag
+                    class="pg-proto-tag"
+                    :class="record.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
+                  >
+                    {{ record.protocol }}
+                  </a-tag>
+                  <HighlightText
+                    class="pg-port-number"
+                    :text="String(record.localPort)"
+                    :ranges="rangesOf(record, 'port')"
+                  />
+                  <a-tag
+                    v-if="isExposed(record)"
+                    class="pg-exposure-tag"
+                  >
+                    Exposed
+                  </a-tag>
+                </template>
+                <template v-else-if="column.key === 'process'">
+                  <HighlightText
+                    :text="record.process.name"
+                    :ranges="rangesOf(record, 'processName')"
+                  />
+                  <span class="pg-process-pid"> · {{ record.pid }}</span>
+                </template>
+                <template v-else-if="column.key === 'app'">
+                  <HighlightText
+                    v-if="record.application !== undefined"
+                    :text="record.application.name"
+                    :ranges="rangesOf(record, 'applicationName')"
+                  />
+                  <span
+                    v-else
+                    class="pg-cell-empty"
+                  >—</span>
+                </template>
+                <template v-else-if="column.key === 'project'">
+                  <HighlightText
+                    v-if="record.project !== undefined"
+                    :text="record.project.name ?? '—'"
+                    :ranges="rangesOf(record, 'projectName')"
+                  />
+                  <span
+                    v-else
+                    class="pg-cell-empty"
+                  >—</span>
+                </template>
+                <template v-else-if="column.key === 'address'">
+                  <HighlightText
+                    :text="record.localAddress"
+                    :ranges="rangesOf(record, 'localAddress')"
+                  />
+                  <span>:{{ record.localPort }}</span>
+                  <span
+                    v-if="record.state"
+                    class="pg-address-state"
+                  > · {{ record.state }}</span>
+                </template>
+                <template v-else-if="column.key === 'uptime'">
+                  <span>{{ uptimeText(record) }}</span>
+                </template>
+                <template v-else-if="column.key === 'action'">
+                  <a-button
+                    size="small"
+                    disabled
+                  >
+                    结束
+                  </a-button>
+                </template>
+              </template>
+            </a-table>
+          </a-tab-pane>
+          <a-tab-pane
+            key="history"
+            :tab="`历史 (0)`"
+          >
+            <a-empty description="暂无历史会话（阶段 5 接入）" />
+          </a-tab-pane>
+        </a-tabs>
       </div>
+
+      <DetailDrawer
+        :open="drawerOpen"
+        :record="drawerRecord"
+        :match="drawerMatch"
+        @close="drawerOpen = false"
+      />
     </div>
   </a-config-provider>
 </template>
@@ -256,47 +303,6 @@ function isExposed(record: PortRecord): boolean {
   }
 }
 
-.pg-search {
-  display: flex;
-  flex: none;
-  gap: 10px;
-  align-items: center;
-  height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--pg-border);
-  border-radius: 9px;
-  background-color: var(--pg-surface);
-  color: var(--pg-muted);
-
-  &__icon {
-    flex: none;
-    color: var(--pg-muted);
-  }
-
-  &__input {
-    flex: 1;
-    border: none;
-    outline: none;
-    background: transparent;
-    font-size: 14px;
-    color: var(--pg-text);
-
-    &::placeholder {
-      color: var(--pg-muted);
-    }
-  }
-
-  &__kbd {
-    padding: 1px 6px;
-    border: 1px solid var(--pg-border);
-    border-radius: 5px;
-    background-color: var(--pg-background);
-    color: var(--pg-secondary);
-    font-size: 12px;
-    font-family: inherit;
-  }
-}
-
 .pg-stats {
   display: flex;
   gap: 18px;
@@ -317,6 +323,10 @@ function isExposed(record: PortRecord): boolean {
 .pg-content {
   flex: 1;
   min-height: 0;
+
+  :deep(.pg-table__row) {
+    cursor: pointer;
+  }
 }
 
 .pg-proto-tag--tcp {
@@ -340,6 +350,10 @@ function isExposed(record: PortRecord): boolean {
 }
 
 .pg-process-pid {
+  color: var(--pg-muted);
+}
+
+.pg-cell-empty {
   color: var(--pg-muted);
 }
 

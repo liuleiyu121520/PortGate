@@ -1,7 +1,7 @@
 # PortGate（端口门禁）V1.1 实施方案
 
-- 方案版本：v1.2（v1.1 经第 2 轮全新审查 reviewer-r2 裁决 **APPROVE**（0 blocker / 0 major / 4 minor / 未决假设 0 / 证据缺口 0，见 §12），第 1 轮 9 项修订全部独立验证闭环；v1.2 仅按主理人指令将 reviewer-r2 的 minor_follow_up 清单 m-04~m-07 实现口径回写受影响小节，无需求/验收/用户可见行为/API/数据语义/范围变化）
-- 状态：APPROVED（依据 reviewer-r2 第 2 轮裁决；v1.2 为 minor 回写版。若主理人或后续 reviewer 认定回写构成范围变化，重新进入审查 loop）
+- 方案版本：v1.3（v1.1 经第 2 轮全新审查 reviewer-r2 裁决 **APPROVE**（0 blocker / 0 major / 4 minor / 未决假设 0 / 证据缺口 0，见 §12）；v1.2 回写 reviewer-r2 minor_follow_up 清单 m-04~m-07；v1.3 按 **PM_REVALIDATE_PASS** 回写「port:list 出参附加 matches 字段」契约澄清（定性：方案文档欠完备的修正，不构成需求语义变化）并同步阶段 2/3 实现事实）
+- 状态：APPROVED（依据 reviewer-r2 第 2 轮裁决；v1.2 为 minor 回写版；v1.3 为 PM 复核通过的契约澄清回写版。若主理人或后续 reviewer 认定构成范围变化，重新进入审查 loop）
 - 日期：2026-09-22
 - 作者：架构师 高见远（software-architect）
 - 路线：标准 / 增量（需求已 PRD_READY）
@@ -177,7 +177,7 @@ PortGate/
 
 | Channel | 方向 | 入参 | 出参 | 依据 |
 |---|---|---|---|---|
-| `port:list` | R | `{ query? }` | `{ records: PortRecord[], stats: { total, tcp, udp, exposed } }`（仅当前快照；历史检索一律走 `port:history`，v1.2 m-05） | §18 |
+| `port:list` | R | `{ query? }` | `{ records: PortRecord[], stats: { total, tcp, udp, exposed }, matches }`——matches 定义与边界见下方契约约束（v1.3，PM_REVALIDATE_PASS）；仅当前快照、历史检索一律走 `port:history`（v1.2 m-05） | §18/§4.3/§4.4 |
 | `port:detail` | R | `recordId` | `PortRecord \| null` | §18 |
 | `port:history` | R | `{ query, limit? }` | `PortSession[]` | §18/§11 |
 | `port:terminate` | R | `recordId` | `TerminateResult`（状态机终态+拒绝原因） | §18/§15 |
@@ -191,6 +191,8 @@ PortGate/
 「复制命令」用 renderer `navigator.clipboard`，不设 IPC。
 
 契约约束（v1.2 m-05）：`ipc-contract.ts` 为每个 channel 注释**唯一职责**；契约测试断言「channel 职责互不重叠、入参字段均有消费方」（阶段 1 建立、阶段 5 接入 `port:history` 时复验）。历史 Tab 计数口径：「当前 N」取自 `port:list`，「历史 M」取自 `port:history` 返回条数。
+
+matches 字段（v1.3，PM_REVALIDATE_PASS）：`port:list` 出参附加 `matches: Record<recordId, { score: number, highlights: Record<field, [start,end][]> }>`，记录级承载 §5.12 的搜索评分与各字段命中区间。依据：需求 §4.3 Search Score 与 §4.4 高亮在 §12 架构下必须经 IPC 由 Main 流向 Renderer（SearchEngine 运行于 Main 进程），属方案文档欠完备的契约澄清/补充，不构成需求语义变化。非搜索态（空查询）matches 为空对象；records/stats 核心出参不变。**PM 边界条件：matches 仅服务渲染与排序，禁止写入 SQLite/port_session（§10.1 写入原则）**。
 
 ### 4.3 安全边界断言（可测）
 
@@ -353,7 +355,7 @@ ps 全表已含 `%cpu/%mem`，Drawer Runtime 区直接展示；不入 AC，无�
 
 ### 阶段 2：平台数据通路（Adapter/Scanner/Diff/IPC）
 
-- 影响文件：src/main/platform/**（types/factory/mac/*、win/linux stub）、src/main/core/port/**、src/main/core/resolve/ProcessResolver.ts、src/main/ipc/register.ts（挂 port:list/refresh/events）、src/shared/ipc-contract.ts 扩展、tests/fixtures/{lsof-scan,ps-core,ps-args,ps-combined-truncation,lsof-cwd}.txt、tests/unit/{lsof,ps,exposure,diff,process-resolver}*.test.ts。
+- 影响文件（v1.3 按实现事实同步，消除清单与步骤口径差）：src/main/platform/**（types/factory/mac/*、win/linux stub）、src/main/core/port/**、src/main/core/resolve/ProcessResolver.ts、src/main/ipc/register.ts（挂 port:list/refresh/events，**并挂载 port:detail——§4.2 白名单正式成员**）、src/shared/ipc-contract.ts 扩展、**renderer 接线：src/renderer/stores/ports.ts、src/renderer/App.vue、src/preload/api.ts、src/preload/index.ts、src/main/dev/probe.ts（dev 探针）、eslint.config.js（no-unused-vars 相应调整）**、tests/fixtures/{lsof-scan,ps-core,ps-args,ps-combined-truncation,lsof-cwd}.txt、tests/unit/{lsof,ps,exposure,diff,process-resolver}*.test.ts。
 - 步骤：PlatformAdapter 接口+工厂 → lsof/ps 解析器（fixture 驱动：lsof-scan.txt 为 `-F0pcnPT` 合并输出真实样例、含 T 子字段噪声；ps-combined-truncation.txt 作为 16 字符截断回归证据——证明为何拆两次调用，M-01/M-02）→ MacAdapter 组装（ps 两调用按 pid join）→ PortScanner 流水线 → DiffEngine → MemoryStore → IPC 三通道 → Renderer 接 `port:events` 局部更新（此时可用极简列表验证）。
 - 测试/验证：解析器/Exposure/Diff 单测绿（含：协议归属自 `PTCP/PUDP`、`TQR/TQS` 容错、单空格列界、单数日期空格填充 lstart、含空格路径、UDP `*:*` 丢弃）；真机起 `python3 -m http.server 18080`（或 node server），dev 模式下列表 2s 内出现该端口、杀进程后 PORT_CLOSED 事件可见；扫描周期切 1/2/5s 生效；**核对项（M-01 关闭判据）：同一端口 TCP/UDP 协议徽标与 stats `{total,tcp,udp,exposed}` 分列与 `lsof -F0pcnPT` 实际输出逐条一致**。
 - AC 映射：AC-07、AC-16（平台隔离成型）、AC-04 数据底座。
@@ -361,7 +363,7 @@ ps 全表已含 `%cpu/%mem`，Drawer Runtime 区直接展示；不入 AC，无�
 
 ### 阶段 3：首页列表 + 统一搜索 + 高亮 + 详情 Drawer
 
-- 影响文件：src/main/core/search/**、src/main/ipc/register.ts（port:list 支持查询）、src/renderer/components/{SearchBar,StatsBar,PortTable,HighlightText,DetailDrawer}.vue、src/renderer/stores/{ports,search}.ts、tests/unit/{search-engine,highlight}*.test.ts。
+- 影响文件（v1.3 补记实现事实）：src/main/core/search/**、src/main/ipc/register.ts（port:list 支持查询）、src/renderer/components/{SearchBar,StatsBar,PortTable,HighlightText,DetailDrawer}.vue、src/renderer/stores/{ports,search}.ts、**src/renderer/utils/format.ts、tests/shims-vue.d.ts、vitest.config.ts（增挂 @vitejs/plugin-vue，m-02 组件测试栈落地）、src/main/dev/probe.ts（phase3 探针扩展）**、tests/unit/{search-engine,highlight}*.test.ts。
 - 步骤：字段映射 + 评分 + AND + 高亮区间（SearchEngine）→ SearchBar（⌘K）+ StatsBar → PortTable + HighlightText → Drawer 十项字段 + 打开目录/复制命令（record:reveal）。
 - 测试/验证：AC-01/02/03 全分支单测（`5173 node buddy` fixture、`3000` 权重用例；v1.2 m-04：**至少一个默认档字段（如 User/Protocol/State）的命中用例**，且**架构测试断言 `fields.ts` 常量表覆盖需求 §4.2 全部 18 字段**）；真机核对 **AC-04 拆段第一段（M-04）：八项 Port/PID/Process/Command/Working Directory/Start Time/Uptime/Exposure 与 `lsof`/`ps` 一致**（node server 进程），Application/Project 仅验「字段位保留」（Resolver 阶段 4 才接入，R-03）；**带空格/长路径应用的 Command 与 Executable 与 ps 两调用输出一致（M-02 真机判据）**。
 - AC 映射：AC-01、AC-02、AC-03、AC-04。
@@ -379,7 +381,7 @@ ps 全表已含 `%cpu/%mem`，Drawer Runtime 区直接展示；不入 AC，无�
 
 - 影响文件：src/main/db/**、src/main/core/store/{SessionStore,SettingsStore}.ts、src/main/core/port/{PortScanner,PortManager}.ts（Diff 事件接线）、src/main/index.ts（退出 flush）、src/main/ipc/register.ts（port:history、settings 落库）、src/renderer/components/HistoryList.vue、stores/{history,settings}.ts、tests/fixtures/port-session-cases.json、tests/unit/{session-store,history-search}*.test.ts。
 - 步骤：**开工前置判据：D-1 判据 B（vitest 侧 better-sqlite3 加载 smoke，§11）通过** → connection + migrations（port_session/app_settings，SQLite 访问自首任务起收敛于 connection.ts 单点，§3.4-4）→ 四类事件写入 + 60s 批量 touch + 退出 flush → port:history（LIKE 预筛+同引擎评分）→ 历史 Tab + 时长格式（`17:30 - 18:42 · 1h12m`）→ 扫描周期/主题持久化。
-- 测试/验证：:memory: 单测覆盖 open/close/changed/processChanged/批量 touch/查询（AC-12）；真机 AC-13（起停端口后历史 Tab 可搜、时间区间正确）；重启应用设置保留；IPC 契约复验（`port:history` 职责唯一、入参均有消费方，v1.2 m-05）。
+- 测试/验证：:memory: 单测覆盖 open/close/changed/processChanged/批量 touch/查询（AC-12）；真机 AC-13（起停端口后历史 Tab 可搜、时间区间正确）；重启应用设置保留；IPC 契约复验（`port:history` 职责唯一、入参均有消费方，v1.2 m-05）；**PortManager 组装层 timing 继承用例（v1.3，QA 阶段 2 minor-1 闭环归属）：fake adapter 两轮扫描断言同端口记录 firstSeen 不变、lastSeen 递增，该语义在 SessionStore 落库前于组装层完成**。
 - AC 映射：AC-12、AC-13、AC-09（closed_at 收口闭环完成）。
 - 回滚：revert 后退回纯内存模式（无历史 Tab）。
 
@@ -496,5 +498,6 @@ R-08 已确认：应用图标先用占位图，正式图标由外部流程约 3 
 | 初稿 | PLAN_READY_FOR_REVIEW | 0（待审） | 0（待审） | 0（待审） | 提交独立 reviewer 对抗审查 |
 | 第 1 轮 | REVISE（0 blocker / 4 major / 3 minor / 未决假设 1 / 证据缺口 1） | 0 | 4 | 3 | **M-01 接受**：扫描命令改 `lsof -F0pcnPT`，lsofParser 增 P/T 子字段规格（取 TST、忽略 TQR/TQS/未知），fixture 改合并样例+噪声容错用例，阶段 2 增协议徽标/stats 核对项（§2.3-9、§5.3、§7 阶段 2、§8.1）。**M-02 接受**：ps 拆两调用按 pid join（comm 列尾完整路径 + args 独立取命令行），psParser 改位置锚定弃用 ≥2 空格切分，fixture 增截断/单空格/单数日期样例，阶段 3 增 Command/Executable 核对、阶段 4 增 AC-05 实树抽查（§2.3-10、§5.3、§7 阶段 2/3/4、§8.1）。**M-03 接受**：§3.4 按「v13 包内 N-API 通用二进制、无 install 脚本、无 prebuild-install」机制重写，移除 postinstall install-app-deps 与 @electron/rebuild，E-1 改述为加载验证（D-1 双侧判据），R-1 重评低/低，AC-14 改口径（§2.3-11、§3.4、§9 R-1、§11 D-1、§7 阶段 1/5/6、§1.2 AC-14、§8.2）。**M-04 接受**：AC-04 拆段——阶段 3 八项+字段位保留，阶段 4 十项终验；§1.2/§7/§8.2 三处一致修订。**m-01/m-02/m-03 接受**：删 port:ping 占位并阶段 1 即断言白名单恒等；§3.1 增 @vue/test-utils + happy-dom（vitest.config 声明 happy-dom）；§11 增 D-3（ICON-ARRIVAL）+ 阶段 6 条件任务。**A-1/E-1 重构**：转为 §11 执行期决策程序 D-1/D-2（全分支既定动作 + 钉版决策点 + PAUSED 逃生口），计数口径变更（未决假设 0 / 证据缺口 0）交下一轮全新 reviewer 独立裁定。修订后状态仍为 PLAN_READY_FOR_REVIEW |
 | 第 2 轮（reviewer-r2，全新实例） | **APPROVE**（0 blocker / 0 major / 4 minor / 未决假设 0 / 证据缺口 0；第 1 轮 9 项修订全部经独立验证闭环） | 0 | 0 | 4 | minor 留存 reviewer 的 minor_follow_up_list_v1，不阻断批准。按主理人指令升版 **v1.2** 仅回写实现口径：**m-04**：§5.12 字段计数 17→18、逐字段映射、默认档 10 分规则、fields.ts 单一常量表 + 架构断言覆盖 §4.2 全集、阶段 3 增默认档字段命中用例；**m-05**：§4.2 port:list 删 tab 参数（历史一律走 port:history）、ipc-contract 每 channel 唯一职责注释、契约测试断言职责互不重叠/入参均有消费方（阶段 1 建立、阶段 5 复验）、历史 Tab 计数口径；**m-06**：§3.3 CSP 完整指令集（style-src 'unsafe-inline' 适配 antd 4 CSS-in-JS——已实测 dependencies 含 @emotion/hash/@emotion/unitless/stylis；dev 下 connect-src 含 ws: 或 prod 才注入 CSP）+ 阶段 1 CSP 就位冒烟；**m-07**：阶段 6 mac 段显式 identity: null + CSC_IDENTITY_AUTO_DISCOVERY=false + 有/无证书双状态复核未签名 dmg。v1.2 未改变任何需求/验收/行为/API/数据语义/范围；若认定构成范围变化，重新进入审查 loop |
+| v1.3 回写（主理人指令；PM 复核 **PM_REVALIDATE_PASS**，定性「方案文档欠完备的契约澄清/补充」，不构成需求语义变化） | 维持 APPROVE（未重开审查） | 0 | 0 | 0 | ① **契约澄清**：§4.2 `port:list` 出参附加 `matches` 字段（记录级 score + 各字段命中区间，承载 §5.12 搜索评分与高亮；依据：§4.3/§4.4 在 §12 架构下须经 IPC 由 Main 流向 Renderer；非搜索态为空对象、records/stats 核心出参不变；**PM 边界条件：matches 仅服务渲染与排序，禁止写入 SQLite/port_session（§10.1 写入原则）**）。② **阶段 2 实现事实同步**（消除清单与步骤口径差，QA 阶段 2 遗留观察）：port:detail 通道挂载（白名单正式成员）+ renderer 接线文件（stores/ports.ts、App.vue、preload/api.ts、preload/index.ts、dev/probe.ts、eslint.config.js no-unused-vars 调整）。③ **阶段 3 实现事实补记**：utils/format.ts、tests/shims-vue.d.ts、vitest.config.ts 增挂 @vitejs/plugin-vue（m-02 组件测试栈落地）、dev/probe.ts phase3 探针扩展。④ **阶段 5 测试清单补一条**（QA 阶段 2 minor-1 闭环归属）：PortManager 组装层 timing 继承用例（fake adapter 两轮扫描断言 firstSeen 不变、lastSeen 递增，SessionStore 落库前完成）。v1.3 未改变任何既有设计决策 |
 
 需 reviewer 重点裁定的设计裁量：① 不引入 Vue Router（§3.1）；② IPC 在 §18 七项之上扩展 settings:get/set 与 record:reveal（§4.2）；③ V1 不预建 favorite/ignore/protection 表（§5.14，R-06 授权裁量）；④ last_seen_at 60s 节流批量写入与 §10.1「只变化时写」原则的兼容口径（§5.14）；⑤ recordId 复合键与 Diff 分组 key 的双层定义（§5.1）。

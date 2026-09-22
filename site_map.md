@@ -15,3 +15,9 @@
 ### [2026-09-23 02:11] feat(platform): 实现 MacAdapter 扫描流水线与 Diff 引擎（阶段2）
 
 - 新增平台适配层（src/main/platform：MacAdapter 完整实现，Win/Linux 预留）与核心引擎（src/main/core/port：扫描/Diff/内存仓），IPC 白名单扩至 6 通道
+
+## 待确认更新
+
+### [2026-09-23 03:00] feat(ui): 实现统一搜索、命中高亮与端口详情 Drawer（阶段3）
+
+- 新增搜索域（src/main/core/search：引擎/字段表/高亮函数）与渲染组件（SearchBar/HighlightText/DetailDrawer）

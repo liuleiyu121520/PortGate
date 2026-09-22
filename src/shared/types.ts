@@ -126,6 +126,15 @@ export interface PortStats {
   exposed: number
 }
 
+/** 高亮区间 [start, end)（end 独占；需求 §4.4：统一由 HighlightText 组件渲染） */
+export type HighlightRange = readonly [number, number]
+
+/** 搜索结果附加信息（方案 §5.12：关键词得分 + 各字段命中区间，按 recordId 索引） */
+export interface SearchMatchInfo {
+  score: number
+  highlights: Record<string, HighlightRange[]>
+}
+
 /* ------------------------------- IPC 事件与载荷（§19） ------------------------------- */
 
 export type DiffEventType = 'PORT_OPENED' | 'PORT_CLOSED' | 'PORT_CHANGED' | 'PROCESS_CHANGED'
@@ -161,10 +170,13 @@ export type PortEvent =
   | { type: 'DIFF'; payload: PortDiffPayload }
   | { type: 'SCAN_ERROR'; payload: PortScanErrorPayload }
 
-/** port:list 出参（方案 §4.2：仅当前快照；历史检索一律走 port:history，v1.2 m-05） */
+/** port:list 出参（方案 §4.2：{ records, stats }，仅当前快照；历史检索一律走 port:history，v1.2 m-05）。
+ * stats 恒为当前全量快照统计（不随 query 变化，统计条口径）；matches 为 §5.12 搜索结果附加信息
+ * （query 为空时为空对象），承载命中区间供 HighlightText 统一渲染。 */
 export interface PortListResult {
   records: PortRecord[]
   stats: PortStats
+  matches: Record<string, SearchMatchInfo>
 }
 
 /** port:refresh 出参（方案 §4.2：{ ok }，触发一次去抖立即扫描） */

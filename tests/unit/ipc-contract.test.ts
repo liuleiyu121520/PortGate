@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   IPC_CHANNEL_CONTRACTS,
   IPC_CHANNEL_WHITELIST,
+  normalizeListQuery,
   normalizeRecordId,
   normalizeSettingsUpdate
 } from '../../src/shared/ipc-contract'
@@ -78,6 +79,21 @@ describe('IPC 契约：唯一职责注释与互不重叠（方案 §4.2 / m-05�
     expect(normalizeRecordId('')).toBeNull()
     expect(normalizeRecordId(null)).toBeNull()
     expect(normalizeRecordId(123)).toBeNull()
+  })
+
+  it('port:list 入参仅 query（v1.2 m-05：无 tab 参数）', () => {
+    const list = IPC_CHANNEL_CONTRACTS.find((contract) => contract.channel === 'port:list')
+    expect(list?.paramFields).toEqual(['query'])
+    expect(list?.paramFields).not.toContain('tab')
+  })
+
+  it('port:list 入参契约：{ query?: string }，缺省/非法载荷归一为空串（全量）', () => {
+    expect(normalizeListQuery({ query: 'node 5173' })).toBe('node 5173')
+    expect(normalizeListQuery({ query: 42 })).toBe('')
+    expect(normalizeListQuery({})).toBe('')
+    expect(normalizeListQuery(undefined)).toBe('')
+    expect(normalizeListQuery(null)).toBe('')
+    expect(normalizeListQuery('node')).toBe('')
   })
 })
 

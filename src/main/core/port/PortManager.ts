@@ -13,6 +13,7 @@ import { MemoryStore } from '../store/MemoryStore'
 import { computeStats } from './exposure'
 import { diffSnapshots } from './DiffEngine'
 import { buildRecordId } from './recordId'
+import { searchRecords } from '../search/SearchEngine'
 
 export interface ScanCycleResult {
   events: DiffEvent[]
@@ -30,9 +31,30 @@ export class PortManager {
     private readonly resolver: ProcessResolver
   ) {}
 
-  listSnapshot(): PortListResult {
-    const records = this.store.list()
-    return { records, stats: computeStats(records) }
+  /**
+   * 当前快照（方案 §4.2 / §5.12）：
+   * - query 为空 → 全量记录（端口升序）、matches 为空对象；
+   * - query 非空 → SearchEngine 过滤排序（score desc），stats 恒为全量口径（统计条不随搜索变化），
+   *   matches 按 recordId 附带关键词得分与各字段命中区间（供 HighlightText 统一渲染）。
+   * 仅当前快照；历史检索一律走 port:history（v1.2 m-05）。
+   */
+  listSnapshot(query = ''): PortListResult {
+    const all = this.store.list()
+    const stats = computeStats(all)
+    if (query.trim().length === 0) {
+      return { records: all, stats, matches: {} }
+    }
+    const matches = searchRecords(all, query)
+    return {
+      records: matches.map((match) => match.record),
+      stats,
+      matches: Object.fromEntries(
+        matches.map((match) => [
+          match.record.recordId,
+          { score: match.score, highlights: match.highlights }
+        ])
+      )
+    }
   }
 
   findRecord(recordId: string): PortRecord | null {
