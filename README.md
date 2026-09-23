@@ -32,6 +32,24 @@ npx electron-builder --linux AppImage deb --publish never
   - 右键点击 `PortGate.app` → 「打开」→ 再点「打开」；
   - 或终端执行 `xattr -cr /Applications/PortGate.app` 后正常打开。
 
+网络受限/离线打包（Electron 二进制下载被重置时）：
+
+electron-builder 每次打包都会拉取 Electron 发行 zip，弱网环境下可能报
+`The server aborted pending request`。两种处理方式：
+
+```bash
+# 方式一：走 npmmirror 镜像
+ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm run dist
+
+# 方式二：完全离线——用本机已缓存的 Electron zip（首次需解压一次）
+ZIP=~/Library/Caches/electron/bb424f9061e7a2927a7fcc04709593fe81ac4633e2cd40456f2ef431743b1ee7/electron-v44.4.3-darwin-arm64.zip
+DIST=~/Library/Caches/electron/portgate-dist/darwin-arm64
+mkdir -p "$DIST" && unzip -oq "$ZIP" -d "$DIST"
+npx electron-builder --mac dmg --arm64 --publish never -c.electronDist="$DIST"
+```
+
+`electronDist` 仅作为命令行覆盖传入，不写入仓库配置（避免影响 CI 下载官方源）。
+
 ## CI
 
 `.github/workflows/build.yml`：push 触发三平台矩阵（macOS / Windows / Ubuntu）——
