@@ -75,11 +75,13 @@ const segments = computed<Segment[]>(() => {
 </template>
 
 <style lang="less" scoped>
+// §4.1 派生裁定 5（高亮蓝语义豁免，UI-AC-03 唯一登记）：
+// mark 文字用 ink 保证可读性（≈13:1），底为 accent 低透明底 --pg-highlight-bg，5px 档圆角
 .pg-highlight__mark {
   padding: 0;
-  color: var(--pg-accent);
-  background-color: color-mix(in srgb, var(--pg-accent) 18%, transparent);
-  border-radius: 2px;
+  color: var(--pg-text);
+  background-color: var(--pg-highlight-bg);
+  border-radius: var(--pg-radius-xs);
   font-weight: 600;
 }
 </style>

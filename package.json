@@ -11,6 +11,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
+    "capture": "PORTGATE_CAPTURE=1 electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

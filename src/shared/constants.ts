@@ -9,6 +9,14 @@ export const DEFAULT_SCAN_INTERVAL: ScanInterval = 2000
 /** 允许的主题枚举（需求 §23） */
 export const THEME_NAMES: readonly ThemeName[] = ['light', 'dark']
 
+/**
+ * 标题栏模式（UI 重构方案 §7.4，R-UI-2 回退开关，单点可独立 revert）：
+ * - 'inset'（默认）：macOS 注入 hiddenInset + 交通灯定位，renderer 页眉为唯一标题层；
+ * - 'system'：恢复系统标题栏（main 不注入 hiddenInset），renderer 全平台页眉去重复标题（仅状态与控件）。
+ * 平台相关的「是否适用」判定全部在 src/main/platform/window.ts 内完成（arch-boundary 合法区）。
+ */
+export const TITLEBAR_MODE: 'inset' | 'system' = 'inset'
+
 /* --------------- SecurityClassifier 路径前缀常量（方案 §5.10：收敛于此，§16 高风险路径） --------------- */
 
 /** 高风险路径 → SYSTEM_CRITICAL（需求 §16：/System/、/usr/libexec/） */

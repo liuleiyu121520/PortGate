@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { COPY } from '../copy'
 
 /**
- * 统一搜索框（需求 §24 / §3）：高度 44px、圆角 9px、左侧搜索图标、右侧 ⌘K 角标、
+ * 统一搜索框（需求 §24 / §3；UI 重构方案 §5.6 pill 化）：
+ * 高度 44px、pill 圆角、左侧搜索图标、右侧 ⌘K 键帽（5px 档）、
  * Command/Control + K 全局快捷聚焦；输入经 @search 交给 ports store（防抖接 port:list query）。
+ * ⌘K 与防抖链路零改动。
  */
 const emit = defineEmits<{
   search: [query: string]
@@ -70,20 +73,20 @@ onUnmounted(() => {
       class="pg-search__input"
       type="text"
       :value="value"
-      placeholder="搜索端口、PID、进程、应用、项目、路径、命令…"
+      :placeholder="COPY.search.placeholder"
       @input="onInput"
     >
     <button
       v-if="value.length > 0"
       class="pg-search__clear"
       type="button"
-      aria-label="清空搜索"
+      :aria-label="COPY.search.clearLabel"
       @click="clear"
     >
       ×
     </button>
     <kbd class="pg-search__kbd">
-      ⌘K
+      {{ COPY.search.kbd }}
     </kbd>
   </div>
 </template>
@@ -96,13 +99,18 @@ onUnmounted(() => {
   align-items: center;
   height: 44px;
   padding: 0 14px;
-  border: 1px solid var(--pg-border);
-  border-radius: 9px;
+  border: 1px solid var(--pg-hairline);
+  // §5.6 pill 化（9px 档外值废除）
+  border-radius: var(--pg-radius-pill);
   background-color: var(--pg-surface);
   color: var(--pg-muted);
+  transition: border-color 0.15s ease;
 
+  // §5.6 焦点态：hairline → accent 描边 + 2px 焦点环
   &:focus-within {
     border-color: var(--pg-accent);
+    outline: 2px solid var(--pg-focus);
+    outline-offset: 1px;
   }
 
   &__icon {
@@ -115,6 +123,7 @@ onUnmounted(() => {
     border: none;
     outline: none;
     background: transparent;
+    font-family: inherit;
     font-size: 14px;
     color: var(--pg-text);
 
@@ -124,14 +133,20 @@ onUnmounted(() => {
   }
 
   &__clear {
+    display: inline-flex;
     flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     border: none;
-    background: transparent;
-    color: var(--pg-secondary);
+    border-radius: var(--pg-radius-xs);
+    background-color: transparent;
+    color: var(--pg-muted);
     font-size: 16px;
     line-height: 1;
     cursor: pointer;
-    padding: 2px 4px;
 
     &:hover {
       color: var(--pg-text);
@@ -141,10 +156,10 @@ onUnmounted(() => {
   &__kbd {
     flex: none;
     padding: 1px 6px;
-    border: 1px solid var(--pg-border);
-    border-radius: 5px;
-    background-color: var(--pg-background);
-    color: var(--pg-secondary);
+    border: 1px solid var(--pg-hairline);
+    border-radius: var(--pg-radius-xs);
+    background-color: var(--pg-bg);
+    color: var(--pg-muted);
     font-size: 12px;
     font-family: inherit;
   }

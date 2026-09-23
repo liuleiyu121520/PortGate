@@ -17,10 +17,14 @@ import { SettingsStore } from './core/store/SettingsStore'
 import { DEFAULT_SCAN_INTERVAL } from '../shared/constants'
 import { IPC_CHANNEL_WHITELIST } from '../shared/ipc-contract'
 import { runPhase2Probe, runPhase3Probe, runPhase4Probe, runPhase5Probe } from './dev/probe'
+import { runUiCapture } from './dev/capture'
+import { getWindowOptions } from './platform/window'
 import type { PortEvent } from '../shared/types'
 
 /** PORTGATE_SMOKE=1：dev 冒烟自动收口（验证完成即退出，供阶段门禁自动核验；不启动周期扫描，由探针手动驱动） */
 const SMOKE_MODE = process.env.PORTGATE_SMOKE === '1'
+/** PORTGATE_CAPTURE=1：dev 截图采集（方案 §10 / MINOR-UIR2-002：复用 SMOKE 的 env-gated 惯例，仅 dev 生效，采集完成自动收口） */
+const CAPTURE_MODE = process.env.PORTGATE_CAPTURE === '1'
 const isDev = !app.isPackaged
 
 let mainWindow: BrowserWindow | null = null
@@ -114,13 +118,18 @@ function createWindow(): void {
     minHeight: 600,
     title: 'PortGate · 端口门禁',
     show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#17191D' : '#F6F7F9',
+    // §7.1：hiddenInset/交通灯定位经 platform/window.ts 注入（平台判定唯一合法区）；
+    // 启动底色对齐新 token（暗 #252527 / 明 #ffffff），消除启动闪色与主题不符
+    ...getWindowOptions(),
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#252527' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webSecurity: true
+      webSecurity: true,
+      // capture 模式关闭背景节流：窗口被遮挡时仍持续出帧，防 capturePage 取到陈旧帧（§10.2 D-UI-C 加固）
+      backgroundThrottling: !CAPTURE_MODE
     }
   })
 
@@ -130,9 +139,20 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
-    if (isDev) {
-      void verifyDevSmoke()
+    if (!isDev) {
+      return
     }
+    // 截图采集与冒烟探针互斥：capture 模式自驱动九状态并自动收口
+    if (CAPTURE_MODE) {
+      if (mainWindow) {
+        void runUiCapture({ window: mainWindow, portManager }).catch((error: unknown) => {
+          log(`[CAPTURE] 采集失败 — ${error instanceof Error ? error.message : String(error)}`)
+          app.quit()
+        })
+      }
+      return
+    }
+    void verifyDevSmoke()
   })
 
   mainWindow.on('closed', () => {

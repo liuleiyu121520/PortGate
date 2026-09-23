@@ -1,0 +1,119 @@
+{
+  "schema_version": "review_scope_manifest_v1",
+  "parent_task_id": "portgate-v1.1-ui-redesign-review",
+  "scope_version": 2,
+  "entries": [
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/prd/portgate-ui-redesign-requirements-v1.md",
+      "type": "requirement",
+      "mode": "0o644",
+      "sha256": "be0e5ece60f5e9d117cf62f196dccc5ae2bb7938319e1fc5d74898d0e13b479b",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/prd/ui-defect-inventory-v1.md",
+      "type": "requirement_input",
+      "mode": "0o644",
+      "sha256": "97641993799735aabd4bb1b9fe38c9fd833ec9038d3b0e358062d4e8c865499c",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/plans/portgate-ui-redesign-plan-v1.md",
+      "type": "plan_under_review",
+      "mode": "0o644",
+      "sha256": "f034451a853a9f86399e1ff7097c2434421c12018ec84a6d075b8cef85863d83",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/awesome-design-md/design-md/apple/DESIGN.md",
+      "type": "external_design_spec",
+      "mode": "0o644",
+      "sha256": "83fbc614443a9b3d7569e9956a43e7b8740f9d0f939f58b8154f7a7cec3002b2",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/docs/software-company/plans/portgate-plan-v1.md",
+      "type": "baseline_plan",
+      "mode": "0o644",
+      "sha256": "38f7fc470c4b154b8b63ef8cd563bbfe971100a2563ca4187bf37b1bd67971d5",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/App.vue",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "8b2318e7aa832beb8ea9ce9b8732731b4cb65dd92721535990899c7dc6a78cb5",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/components/SearchBar.vue",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "8a5de63c7ca23f0a677a8b709078fff66696be4fb01e0d96f46953df499728e5",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/components/HighlightText.vue",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "4f5c2bc0a71a21e118da646309ec4c0755e8da3ece75bb04a73bbb7545a5e7bd",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/components/DetailDrawer.vue",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "7e277a291d7e0eb3c0da76e232910cd4486ad388ce691708c91e44d06805ce5a",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/styles/variables.less",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "c01a9e9ce17d7a9fc2a7f3a8e5b69e5bb82e211bcb8ea6acb886a836f7dd7b9c",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/styles/themes.less",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "c4c3c895222d07243f34d9c223b9c4628bf091398d6769fe8fc1844c6902bbc8",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/renderer/theme.ts",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "0d74a8c381c0bd921af65c78b481abcef1d47f6caf9ec34557f7139a6d4c6a63",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/main/index.ts",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "13f7d049e3a943095a8a3445b3240e74b8a978af08752103b988ed55cf130f59",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    },
+    {
+      "path": "/Users/leiyu/code/github/PortGate/src/main/core/search/fields.ts",
+      "type": "code_fact",
+      "mode": "0o644",
+      "sha256": "d4bef827d49c55d51585de113ddb56fa8b28187e37b60c92e4d2d27519b856ee",
+      "symlink": false,
+      "secret_status": "CLEAR"
+    }
+  ]
+}

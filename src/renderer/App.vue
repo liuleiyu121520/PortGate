@@ -5,12 +5,20 @@ import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import DetailDrawer from './components/DetailDrawer.vue'
 import HighlightText from './components/HighlightText.vue'
 import SearchBar from './components/SearchBar.vue'
+import SettingsMenu from './components/SettingsMenu.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
 import { useTerminate } from './composables/terminate'
-import { THEME_PALETTES } from './theme'
-import type { HighlightRange, PortRecord, PortSession } from '../shared/types'
+import { COLUMN_DEFS, COPY, SEP, fill } from './copy'
+import { FONT_STACK, PG_RADIUS, THEME_TOKENS } from './theme'
+import { TITLEBAR_MODE } from '../shared/constants'
+import type {
+  HighlightRange,
+  PortRecord,
+  PortSession,
+  SecurityLevel
+} from '../shared/types'
 import { formatClock, formatDuration } from './utils/format'
 
 const settingsStore = useSettingsStore()
@@ -18,41 +26,76 @@ const portsStore = usePortsStore()
 // 安全终止交互（确认框/PENDING_FORCE 强制二次确认/拒绝文案映射；终止后主进程触发即时重扫局部刷新）
 const { confirmTerminate } = useTerminate()
 
-// R-01 平台降级提示（阶段 6）：非 macOS 平台显示适配中横幅。
+// R-01 平台降级提示：非 macOS 平台显示中性 notice 横幅（§5.1，warning 琥珀废除）。
 // renderer 侧禁止触碰平台标识全局变量（AC-16 红线），以 navigator.userAgent 判定（合法 Web API）。
 const isNonMacPlatform = computed(
   () => !/Macintosh|Mac OS X|MacOS/i.test(navigator.userAgent)
 )
 
-const palette = computed(() => THEME_PALETTES[settingsStore.theme])
+// §7.3 页眉标题显隐：hiddenInset（macOS）时页眉为唯一标题层；
+// TITLEBAR_MODE='system'（R-UI-2 回退开关）或非 mac 平台下去重，页眉仅状态与控件
+const showHeaderTitle = TITLEBAR_MODE === 'inset' && !isNonMacPlatform.value
 
-// antd 经 ConfigProvider 切换算法 + token（映射同一色板源，方案 §6）
-const antdThemeConfig = computed(() => ({
-  algorithm: settingsStore.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-  token: {
-    colorBgBase: palette.value.background,
-    colorTextBase: palette.value.text,
-    colorPrimary: palette.value.accent,
-    colorBorder: palette.value.border,
-    colorBorderSecondary: palette.value.border,
-    colorSuccess: palette.value.success,
-    colorWarning: palette.value.warning,
-    colorError: palette.value.danger
+// antd 经 ConfigProvider 切换算法 + token（§4.8 映射表：由 theme.ts token 镜像生成）
+const antdThemeConfig = computed(() => {
+  const tokens = THEME_TOKENS[settingsStore.theme]
+  return {
+    algorithm: settingsStore.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    token: {
+      colorBgBase: tokens.bg,
+      colorBgContainer: tokens.canvas,
+      colorBgElevated: tokens.elevated,
+      colorTextBase: tokens.text,
+      colorTextSecondary: tokens.muted,
+      colorTextTertiary: tokens.muted,
+      colorTextQuaternary: tokens.disabled,
+      colorTextDisabled: tokens.disabled,
+      colorPrimary: tokens.accentFill,
+      colorLink: tokens.accent,
+      colorLinkHover: tokens.accentHover,
+      colorError: tokens.dangerFill,
+      colorErrorText: tokens.dangerText,
+      colorWarning: tokens.warning,
+      colorSuccess: tokens.success,
+      colorBorder: tokens.hairline,
+      colorBorderSecondary: tokens.hairline,
+      borderRadius: PG_RADIUS.sm,
+      borderRadiusSM: PG_RADIUS.xs,
+      borderRadiusLG: PG_RADIUS.lg,
+      fontFamily: FONT_STACK
+    }
   }
-}))
+})
 
-// 统计条（全量口径，不随搜索变化；来自 port:list stats / 非搜索态本地同口径重算）
-const statsItems = computed(() => [
-  { label: 'Ports', value: portsStore.stats.total, exposed: false },
-  { label: 'TCP', value: portsStore.stats.tcp, exposed: false },
-  { label: 'UDP', value: portsStore.stats.udp, exposed: false },
-  { label: 'Exposed', value: portsStore.stats.exposed, exposed: true }
+interface StatItem {
+  label: string
+  value: number
+  exposed: boolean
+}
+
+// 统计条（§5.2：中文标签 12px muted + 数字 13px/600 ink；琥珀仅 Exposed>0，全量口径不随搜索变化）
+const statsItems = computed<StatItem[]>(() => [
+  { label: COPY.stats.labels.total, value: portsStore.stats.total, exposed: false },
+  { label: COPY.stats.labels.tcp, value: portsStore.stats.tcp, exposed: false },
+  { label: COPY.stats.labels.udp, value: portsStore.stats.udp, exposed: false },
+  { label: COPY.stats.labels.exposed, value: portsStore.stats.exposed, exposed: true }
 ])
 
-const activeTab = ref<'current' | 'history'>('current')
-const currentCount = computed(() => portsStore.records.length)
+interface TabItem {
+  key: 'current' | 'history'
+  label: string
+  count: number
+}
 
-// 历史 Tab：激活或搜索词变化时经 port:history 重拉（M 计数 = 返回条数）
+const activeTab = ref<'current' | 'history'>('current')
+
+// §5.3 分段控件段（计数口径不变：当前=records.length，历史=port:history 返回条数）
+const tabs = computed<TabItem[]>(() => [
+  { key: 'current', label: COPY.tabs.current, count: portsStore.records.length },
+  { key: 'history', label: COPY.tabs.history, count: portsStore.historyCount }
+])
+
+// 历史 Tab：激活或搜索词变化时经 port:history 重拉
 watch(activeTab, (tab) => {
   if (tab === 'history') {
     void portsStore.loadHistory()
@@ -66,20 +109,23 @@ function handleSearch(query: string): void {
   }
 }
 
-interface HistoryColumn {
+function switchTab(tab: TabItem): void {
+  activeTab.value = tab.key
+}
+
+interface UiColumn {
   title: string
   key: string
   width?: number
 }
 
-// 历史行展示（需求 §11）：端口/进程/项目/时间区间/时长（如 17:30 - 18:42 · 1h12m）
-const historyColumns: HistoryColumn[] = [
-  { title: 'PORT', key: 'port', width: 150 },
-  { title: 'PROCESS', key: 'process', width: 170 },
-  { title: 'PROJECT', key: 'project', width: 150 },
-  { title: 'INTERVAL', key: 'interval' },
-  { title: 'DURATION', key: 'duration', width: 110 }
-]
+function toUiColumns(defs: readonly { key: string; label: string; width?: number }[]): UiColumn[] {
+  return defs.map((def) => ({ title: def.label, key: def.key, width: def.width }))
+}
+
+// 列定义单一来源（§5.4/§8：copy.ts COLUMN_DEFS；PROJECT 列并入进程列，D-UI-04）
+const currentColumns: UiColumn[] = toUiColumns(COLUMN_DEFS.current)
+const historyColumns: UiColumn[] = toUiColumns(COLUMN_DEFS.history)
 
 function sessionInterval(session: PortSession): string {
   const end = session.closedAt ?? session.lastSeenAt
@@ -91,22 +137,18 @@ function sessionDuration(session: PortSession): string {
   return formatDuration(end - session.firstSeenAt)
 }
 
-interface TableColumn {
+interface EmptyState {
   title: string
-  key: string
-  width?: number
+  hint?: string
 }
 
-// 列头按需求 §3：PORT/PROCESS/APP/PROJECT/ADDRESS/UPTIME/ACTION
-const columns: TableColumn[] = [
-  { title: 'PORT', key: 'port', width: 170 },
-  { title: 'PROCESS', key: 'process', width: 170 },
-  { title: 'APP', key: 'app', width: 110 },
-  { title: 'PROJECT', key: 'project', width: 130 },
-  { title: 'ADDRESS', key: 'address', width: 200 },
-  { title: 'UPTIME', key: 'uptime', width: 100 },
-  { title: 'ACTION', key: 'action' }
-]
+// §5.4 空态：搜索无命中 > 历史空态 / 当前空态（文案单一来源 COPY.empty）
+function emptyFor(tab: 'current' | 'history'): EmptyState {
+  if (portsStore.query.trim().length > 0) {
+    return { title: COPY.empty.search, hint: COPY.empty.searchHint }
+  }
+  return tab === 'history' ? { title: COPY.empty.history } : { title: COPY.empty.current }
+}
 
 const drawerOpen = ref(false)
 const drawerRecordId = ref<string | null>(null)
@@ -121,6 +163,8 @@ function openDrawer(record: PortRecord): void {
   drawerRecordId.value = record.recordId
   drawerOpen.value = true
 }
+
+const hasScanError = computed(() => portsStore.scanError !== null)
 
 const nowTick = ref(Date.now())
 let uptimeTimer: ReturnType<typeof setInterval> | null = null
@@ -149,6 +193,22 @@ function isExposed(record: PortRecord): boolean {
 function rangesOf(record: PortRecord, field: string): HighlightRange[] {
   return (portsStore.matches[record.recordId]?.highlights[field] ?? []) as HighlightRange[]
 }
+
+/** 保护进程行内 tooltip（§5.5-2：行内=tooltip、抽屉=常显） */
+function protectedReason(level: SecurityLevel): string {
+  return fill(COPY.tooltips.protected, { level })
+}
+
+/** 地址完整值 tooltip（§5.4：remote 存在时 `local → remote`，箭头常量来自 COPY） */
+function addressTooltip(record: PortRecord): string {
+  const local = `${record.localAddress}:${record.localPort}`
+  if (record.remoteAddress === undefined) {
+    return local
+  }
+  const remote =
+    record.remotePort !== undefined ? `${record.remoteAddress}:${record.remotePort}` : record.remoteAddress
+  return `${local} ${SEP.ARROW} ${remote}`
+}
 </script>
 
 <template>
@@ -158,191 +218,243 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
   >
     <div class="pg-shell">
       <header class="pg-header">
-        <div class="pg-brand">
-          <h1 class="pg-brand__title">
-            PortGate · 端口门禁
-          </h1>
+        <h1
+          v-if="showHeaderTitle"
+          class="pg-header__title"
+        >
+          {{ COPY.header.title }}
+        </h1>
+        <div class="pg-header__spacer" />
+        <div class="pg-header__side">
           <span
-            class="pg-brand__status"
-            :class="{ 'pg-brand__status--error': portsStore.scanError !== null }"
+            class="pg-header__status"
+            :class="{ 'pg-header__status--error': hasScanError }"
           >
             <span
-              class="pg-brand__dot"
-              :class="{ 'pg-brand__dot--error': portsStore.scanError !== null }"
+              class="pg-header__dot"
+              :class="{ 'pg-header__dot--error': hasScanError }"
             />
-            {{ portsStore.scanError !== null ? 'Scan Error' : 'Monitoring' }}
+            {{ hasScanError ? COPY.header.scanFailed : COPY.header.monitoring }}
           </span>
+          <ThemeToggle />
+          <SettingsMenu />
         </div>
-        <ThemeToggle />
       </header>
 
-      <a-alert
+      <div
         v-if="isNonMacPlatform"
-        type="warning"
-        show-icon
-        class="pg-platform-banner"
-        message="当前平台适配开发中"
-        description="Windows / Linux Adapter 的完整功能将在后续版本提供（R-01：界面与历史可浏览，扫描与安全终止暂不可用）。"
-      />
+        class="pg-banner"
+        role="note"
+      >
+        <p class="pg-banner__title">
+          {{ COPY.banner.title }}
+        </p>
+        <p class="pg-banner__desc">
+          {{ COPY.banner.description }}
+        </p>
+      </div>
 
-      <SearchBar @search="handleSearch" />
+      <div class="pg-search-row">
+        <SearchBar @search="handleSearch" />
+      </div>
 
       <div class="pg-stats">
-        <span
-          v-for="stat in statsItems"
+        <template
+          v-for="(stat, index) in statsItems"
           :key="stat.label"
-          class="pg-stats__item"
-          :class="{ 'pg-stats__item--exposed': stat.exposed }"
         >
-          <strong>{{ stat.value }}</strong> {{ stat.label }}
-        </span>
+          <span
+            v-if="index > 0"
+            class="pg-stats__sep"
+          >{{ SEP.DOT }}</span>
+          <span
+            class="pg-stats__item"
+            :class="{ 'pg-stats__item--exposed': stat.exposed && portsStore.stats.exposed > 0 }"
+          >
+            <span class="pg-stats__label">{{ stat.label }}</span>
+            <span class="pg-stats__value pg-num">{{ stat.value }}</span>
+          </span>
+        </template>
       </div>
 
       <div class="pg-content">
-        <a-tabs
-          v-model:active-key="activeTab"
-          size="small"
+        <div
+          class="pg-segments"
+          role="tablist"
         >
-          <a-tab-pane
-            key="current"
-            :tab="`当前 (${currentCount})`"
+          <button
+            v-for="tab in tabs"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="pg-seg pg-press"
+            :class="{ 'pg-seg--active': activeTab === tab.key }"
+            :aria-selected="activeTab === tab.key"
+            :data-tab="tab.key"
+            @click="switchTab(tab)"
           >
-            <a-table
-              :columns="columns"
-              :data-source="portsStore.records"
-              :pagination="false"
-              :loading="!portsStore.ready"
-              row-key="recordId"
-              size="middle"
-              class="pg-table"
-              :custom-row="(record: PortRecord) => ({ onClick: () => openDrawer(record), class: 'pg-table__row' })"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'port'">
-                  <a-tag
-                    class="pg-proto-tag"
-                    :class="record.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
-                  >
-                    {{ record.protocol }}
-                  </a-tag>
+            {{ tab.label }} {{ tab.count }}
+          </button>
+        </div>
+
+        <div v-show="activeTab === 'current'">
+          <a-table
+            :columns="currentColumns"
+            :data-source="portsStore.records"
+            :pagination="false"
+            :loading="!portsStore.ready"
+            row-key="recordId"
+            size="middle"
+            table-layout="fixed"
+            class="pg-table"
+            :custom-row="(record: PortRecord) => ({ onClick: () => openDrawer(record), class: 'pg-table__row' })"
+          >
+            <template #emptyText>
+              <div class="pg-empty">
+                <p class="pg-empty__title">
+                  {{ emptyFor('current').title }}
+                </p>
+                <p
+                  v-if="emptyFor('current').hint"
+                  class="pg-empty__hint"
+                >
+                  {{ emptyFor('current').hint }}
+                </p>
+              </div>
+            </template>
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'port'">
+                <HighlightText
+                  class="pg-port pg-num"
+                  :text="String(record.localPort)"
+                  :ranges="rangesOf(record, 'port')"
+                />
+                <span class="pg-cell-sub pg-proto">{{ record.protocol }}</span>
+                <span
+                  v-if="isExposed(record)"
+                  class="pg-exposed-tag"
+                >{{ COPY.stats.labels.exposed }}</span>
+              </template>
+              <template v-else-if="column.key === 'process'">
+                <HighlightText
+                  class="pg-cell-main"
+                  :text="record.process.name"
+                  :ranges="rangesOf(record, 'processName')"
+                />
+                <span class="pg-cell-sub pg-pid">
+                  {{ COPY.table.pidLabel }}
                   <HighlightText
-                    class="pg-port-number"
-                    :text="String(record.localPort)"
-                    :ranges="rangesOf(record, 'port')"
+                    class="pg-num"
+                    :text="String(record.pid)"
+                    :ranges="rangesOf(record, 'pid')"
                   />
-                  <a-tag
-                    v-if="isExposed(record)"
-                    class="pg-exposure-tag"
-                  >
-                    Exposed
-                  </a-tag>
-                </template>
-                <template v-else-if="column.key === 'process'">
-                  <HighlightText
-                    :text="record.process.name"
-                    :ranges="rangesOf(record, 'processName')"
-                  />
-                  <span class="pg-process-pid"> · {{ record.pid }}</span>
-                </template>
-                <template v-else-if="column.key === 'app'">
-                  <HighlightText
-                    v-if="record.application !== undefined"
-                    :text="record.application.name"
-                    :ranges="rangesOf(record, 'applicationName')"
-                  />
-                  <span
-                    v-else
-                    class="pg-cell-empty"
-                  >—</span>
-                </template>
-                <template v-else-if="column.key === 'project'">
-                  <HighlightText
-                    v-if="record.project !== undefined"
-                    :text="record.project.name ?? '—'"
-                    :ranges="rangesOf(record, 'projectName')"
-                  />
-                  <span
-                    v-else
-                    class="pg-cell-empty"
-                  >—</span>
-                </template>
-                <template v-else-if="column.key === 'address'">
-                  <HighlightText
+                  <template v-if="record.project?.name">
+                    <span class="pg-pid__sep">{{ SEP.DOT }}</span>
+                    <HighlightText
+                      :text="record.project.name"
+                      :ranges="rangesOf(record, 'projectName')"
+                    />
+                  </template>
+                </span>
+              </template>
+              <template v-else-if="column.key === 'app'">
+                <HighlightText
+                  v-if="record.application !== undefined"
+                  class="pg-cell-main"
+                  :text="record.application.name"
+                  :ranges="rangesOf(record, 'applicationName')"
+                />
+                <span
+                  v-else
+                  class="pg-cell-empty"
+                >{{ COPY.table.emptyValue }}</span>
+              </template>
+              <template v-else-if="column.key === 'address'">
+                <a-tooltip :title="addressTooltip(record)">
+                  <span class="pg-cell-main pg-num"><HighlightText
                     :text="record.localAddress"
                     :ranges="rangesOf(record, 'localAddress')"
-                  />
-                  <span>:{{ record.localPort }}</span>
-                  <span
+                  />:{{ record.localPort }}<span
                     v-if="record.state"
-                    class="pg-address-state"
-                  > · {{ record.state }}</span>
-                </template>
-                <template v-else-if="column.key === 'uptime'">
-                  <span>{{ uptimeText(record) }}</span>
-                </template>
-                <template v-else-if="column.key === 'action'">
-                  <a-tooltip
-                    v-if="record.security.level !== 'USER'"
-                    :title="`System Protected（${record.security.level}）`"
-                  >
-                    <a-button
-                      size="small"
+                    class="pg-cell-sub pg-address-state"
+                  >{{ record.state }}</span></span>
+                </a-tooltip>
+              </template>
+              <template v-else-if="column.key === 'uptime'">
+                <span class="pg-num">{{ uptimeText(record) }}</span>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-tooltip
+                  v-if="record.security.level !== 'USER'"
+                  :title="protectedReason(record.security.level)"
+                >
+                  <span class="pg-btn-mask">
+                    <button
+                      class="pg-btn pg-btn--terminate"
+                      type="button"
                       disabled
                     >
-                      结束
-                    </a-button>
-                  </a-tooltip>
-                  <a-button
-                    v-else
-                    size="small"
-                    danger
-                    @click.stop="confirmTerminate(record)"
-                  >
-                    结束
-                  </a-button>
-                </template>
+                      {{ COPY.actions.terminate }}
+                    </button>
+                  </span>
+                </a-tooltip>
+                <button
+                  v-else
+                  class="pg-btn pg-btn--terminate pg-press"
+                  type="button"
+                  @click.stop="confirmTerminate(record)"
+                >
+                  {{ COPY.actions.terminate }}
+                </button>
               </template>
-            </a-table>
-          </a-tab-pane>
-          <a-tab-pane
-            key="history"
-            :tab="`历史 (${portsStore.historyCount})`"
+            </template>
+          </a-table>
+        </div>
+
+        <div v-show="activeTab === 'history'">
+          <a-table
+            :columns="historyColumns"
+            :data-source="portsStore.historySessions"
+            :pagination="{ pageSize: 50, hideOnSinglePage: true }"
+            row-key="id"
+            size="middle"
+            table-layout="fixed"
+            class="pg-table"
           >
-            <a-table
-              :columns="historyColumns"
-              :data-source="portsStore.historySessions"
-              :pagination="{ pageSize: 50, hideOnSinglePage: true }"
-              row-key="id"
-              size="middle"
-              class="pg-table"
-            >
-              <template #bodyCell="{ column, record: session }">
-                <template v-if="column.key === 'port'">
-                  <a-tag
-                    class="pg-proto-tag"
-                    :class="session.protocol === 'TCP' ? 'pg-proto-tag--tcp' : 'pg-proto-tag--udp'"
-                  >
-                    {{ session.protocol }}
-                  </a-tag>
-                  <span class="pg-port-number">{{ session.localPort }}</span>
-                </template>
-                <template v-else-if="column.key === 'process'">
-                  <span>{{ session.processName }}</span>
-                  <span class="pg-process-pid"> · {{ session.pid }}</span>
-                </template>
-                <template v-else-if="column.key === 'project'">
-                  <span>{{ session.projectName ?? '—' }}</span>
-                </template>
-                <template v-else-if="column.key === 'interval'">
-                  <span>{{ sessionInterval(session) }}</span>
-                </template>
-                <template v-else-if="column.key === 'duration'">
-                  <span>{{ sessionDuration(session) }}</span>
-                </template>
+            <template #emptyText>
+              <div class="pg-empty">
+                <p class="pg-empty__title">
+                  {{ emptyFor('history').title }}
+                </p>
+                <p
+                  v-if="emptyFor('history').hint"
+                  class="pg-empty__hint"
+                >
+                  {{ emptyFor('history').hint }}
+                </p>
+              </div>
+            </template>
+            <template #bodyCell="{ column, record: session }">
+              <template v-if="column.key === 'port'">
+                <span class="pg-port pg-num">{{ session.localPort }}</span>
+                <span class="pg-cell-sub pg-proto">{{ session.protocol }}</span>
               </template>
-            </a-table>
-          </a-tab-pane>
-        </a-tabs>
+              <template v-else-if="column.key === 'process'">
+                <span class="pg-cell-main">{{ session.processName }}</span>
+                <span class="pg-cell-sub pg-pid">
+                  {{ COPY.table.pidLabel }} {{ session.pid }}<template v-if="session.projectName">
+                    {{ SEP.DOT }} {{ session.projectName }}</template>
+                </span>
+              </template>
+              <template v-else-if="column.key === 'interval'">
+                <span class="pg-num">{{ sessionInterval(session) }}</span>
+              </template>
+              <template v-else-if="column.key === 'duration'">
+                <span class="pg-num">{{ sessionDuration(session) }}</span>
+              </template>
+            </template>
+          </a-table>
+        </div>
       </div>
 
       <DetailDrawer
@@ -360,68 +472,129 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 0 20px 16px;
-  background-color: var(--pg-background);
+  background-color: var(--pg-bg);
   transition: background-color 0.2s ease;
 }
 
+/* ---------- §5.1 页眉（52px 全幅条带、拖拽区、交通灯避让） ---------- */
 .pg-header {
   display: flex;
+  flex: none;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 2px 10px;
-}
-
-.pg-brand {
-  display: flex;
-  align-items: baseline;
+  height: 52px;
+  // hiddenInset 交通灯避让：x=16 + 灯组 ~52px → 内容自 80px 起（§7.1/§7.2）
+  padding: 0 16px 0 80px;
+  background-color: var(--pg-bg);
+  -webkit-app-region: drag;
+  user-select: none;
 
   &__title {
     margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
+    // §4.5 页面标题：17px/600/字距 -0.2px/行高 22px
     color: var(--pg-text);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 22px;
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+  }
+
+  &__spacer {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__side {
+    display: flex;
+    flex: none;
+    gap: var(--pg-space-3);
+    align-items: center;
   }
 
   &__status {
     display: inline-flex;
     gap: 6px;
     align-items: center;
-    margin-left: 12px;
+    color: var(--pg-muted);
     font-size: 12px;
-    color: var(--pg-secondary);
+    white-space: nowrap;
+
+    &--error {
+      color: var(--pg-danger-text);
+    }
   }
 
   &__dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--pg-radius-pill);
     background-color: var(--pg-success);
-  }
 
-  &__dot--error {
-    background-color: var(--pg-danger);
+    &--error {
+      background-color: var(--pg-danger-text);
+    }
   }
 }
 
-.pg-platform-banner {
-  margin-bottom: 10px;
+/* ---------- R-01 平台横幅（中性 notice） ---------- */
+.pg-banner {
+  flex: none;
+  margin: 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--pg-hairline);
+  border-radius: var(--pg-radius-sm);
+  background-color: var(--pg-surface);
+
+  &__title {
+    margin: 0;
+    color: var(--pg-text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  &__desc {
+    margin: 4px 0 0;
+    color: var(--pg-muted);
+    font-size: 12px;
+  }
 }
 
+.pg-search-row {
+  flex: none;
+  padding: 12px 20px 0;
+}
+
+/* ---------- §5.2 统计条（40px 全幅条带，surface 面） ---------- */
 .pg-stats {
   display: flex;
-  gap: 18px;
-  padding: 12px 2px;
-  font-size: 13px;
-  color: var(--pg-secondary);
+  flex: none;
+  gap: 10px;
+  align-items: center;
+  height: 40px;
+  margin-top: var(--pg-space-3);
+  padding: 0 20px;
+  background-color: var(--pg-surface);
+  user-select: none;
 
-  &__item strong {
-    font-weight: 600;
-    color: var(--pg-text);
+  &__label {
+    color: var(--pg-muted);
+    font-size: 12px;
   }
 
-  &__item--exposed strong {
+  &__value {
+    margin-left: 4px;
+    color: var(--pg-text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  &__sep {
+    color: var(--pg-muted);
+    font-size: 12px;
+  }
+
+  // 琥珀唯一条件：仅 Exposed>0 时「对外」数字用 --pg-warning（§5.2）
+  &__item--exposed .pg-stats__value {
     color: var(--pg-warning);
   }
 }
@@ -429,42 +602,146 @@ function rangesOf(record: PortRecord, field: string): HighlightRange[] {
 .pg-content {
   flex: 1;
   min-height: 0;
+  padding: 12px 20px 16px;
+  overflow: auto;
+}
+
+/* ---------- §5.3 分段控件（pill 容器 + elevated 系选中 chip，替换 a-tabs） ---------- */
+.pg-segments {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  margin-bottom: var(--pg-space-3);
+  padding: 2px;
+  border: 1px solid var(--pg-hairline);
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-surface);
+  user-select: none;
+}
+
+.pg-seg {
+  min-width: 64px;
+  min-height: 26px;
+  padding: 3px 14px;
+  border: none;
+  border-radius: var(--pg-radius-pill);
+  background-color: transparent;
+  color: var(--pg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  cursor: pointer;
+  user-select: none;
+
+  // 选中段：chip（canvas 面，暗色下与 surface 容器可辨）+ 交互蓝文字档 600（UI-AC-19）
+  &--active {
+    background-color: var(--pg-canvas);
+    color: var(--pg-accent);
+    font-weight: 600;
+  }
+}
+
+/* ---------- §5.4 表格密度与单行化（antd Table 保留，token + 定向覆盖） ---------- */
+.pg-table {
+  :deep(.ant-table) {
+    background-color: transparent;
+  }
+
+  // 表头：中文 12px/600 muted、无大写变换、底 hairline（UI-AC-14/22）
+  :deep(.ant-table-thead > tr > th) {
+    padding: 8px 12px;
+    background-color: transparent;
+    border-bottom: 1px solid var(--pg-hairline);
+    color: var(--pg-muted);
+    font-size: 12px;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  // 单元格：padding 与 copy.ts TABLE_DENSITY 恒等（13px 12px）→ 行高 13*2+20+1 = 47px ∈ 44–60；
+  // 单行化 + hairline 行分隔 + 斑马纹/外框废除
+  :deep(.ant-table-tbody > tr > td) {
+    padding: 13px 12px;
+    background-color: transparent;
+    border-bottom: 1px solid var(--pg-hairline);
+    color: var(--pg-text);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.15s ease;
+  }
+
+  // 行 hover：tile 微阶语法（--pg-surface），行点击开抽屉行为不变
+  :deep(.ant-table-tbody > tr.ant-table-row:hover > td) {
+    background-color: var(--pg-surface);
+  }
 
   :deep(.pg-table__row) {
     cursor: pointer;
   }
 }
 
-.pg-proto-tag--tcp {
-  color: var(--pg-accent);
-  border-color: var(--pg-accent);
-}
-
-.pg-proto-tag--udp {
-  color: var(--pg-success);
-  border-color: var(--pg-success);
-}
-
-.pg-port-number {
-  margin: 0 4px;
+/* ---------- 单元格语义（无状态色徽标：TCP/UDP 纯文本，UI-AC-03/11） ---------- */
+.pg-port {
+  color: var(--pg-text);
   font-weight: 600;
 }
 
-.pg-exposure-tag {
-  color: var(--pg-warning);
-  border-color: var(--pg-warning);
+.pg-cell-main {
+  color: var(--pg-text);
 }
 
-.pg-process-pid {
+.pg-cell-sub {
   color: var(--pg-muted);
+  font-size: 12px;
 }
 
 .pg-cell-empty {
   color: var(--pg-muted);
 }
 
+.pg-proto {
+  margin-left: 8px;
+}
+
+// 琥珀唯一语义色（§4.2）：Exposed 短标签 11px，仅出现在 PORT 列 Exposed 行
+.pg-exposed-tag {
+  margin-left: 8px;
+  color: var(--pg-warning);
+  font-size: 11px;
+}
+
+.pg-pid {
+  margin-left: 8px;
+
+  &__sep {
+    margin: 0 4px;
+  }
+}
+
 .pg-address-state {
-  color: var(--pg-muted);
-  font-size: 12px;
+  margin-left: 8px;
+}
+
+/* ---------- §5.4 空态 ---------- */
+.pg-empty {
+  padding: 32px 0;
+
+  &__title {
+    margin: 0;
+    color: var(--pg-text);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  &__hint {
+    margin: 6px 0 0;
+    color: var(--pg-muted);
+    font-size: 12px;
+    text-align: center;
+  }
 }
 </style>

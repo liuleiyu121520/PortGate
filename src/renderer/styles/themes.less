@@ -1,33 +1,65 @@
-// CSS custom properties 双主题作用域（方案 §6：Less 变量构建期生成 CSS custom properties）。
-// 默认 :root 为 Cloud Slate（light），<html data-theme="dark"> 时切换 Midnight Slate。
-// 变量表经 electron.vite.config.ts 的 less additionalData 注入。
+// CSS custom properties 双主题作用域（UI 重构方案 §4.1：Less 变量构建期生成稳定语义名）。
+// 默认 :root 为明色，<html data-theme="dark"> 时切换暗色（第一观感达标项）。
+// 变量表经 electron.vite.config.ts 的 less additionalData 注入；
+// 与 src/renderer/theme.ts 的 JS 镜像三处同源（design-tokens 断言）。
 
 :root {
-  --pg-background: @cloud-background;
-  --pg-surface: @cloud-surface;
-  --pg-surface-2: @cloud-surface-2;
-  --pg-border: @cloud-border;
-  --pg-text: @cloud-text;
-  --pg-secondary: @cloud-secondary;
-  --pg-muted: @cloud-muted;
-  --pg-accent: @cloud-accent;
-  --pg-success: @cloud-success;
-  --pg-warning: @cloud-warning;
-  --pg-danger: @cloud-danger;
+  --pg-bg: @light-bg;
+  --pg-canvas: @light-canvas;
+  --pg-surface: @light-canvas-parchment;
+  --pg-text: @light-ink;
+  --pg-muted: @light-body-muted;
+  --pg-hairline: @light-hairline;
+  --pg-accent: @light-primary;
+  --pg-accent-fill: @light-primary;
+  --pg-accent-hover: @light-primary-hover;
+  --pg-accent-fill-hover: @light-primary-hover;
+  --pg-focus: @light-primary-focus;
+  --pg-danger-text: @light-danger-text;
+  --pg-danger-fill: @light-danger-fill;
+  --pg-warning: @light-warning;
+  --pg-success: @light-success;
+  --pg-disabled: @light-disabled;
+  --pg-elevated: @light-elevated;
+  --pg-on-primary: @pg-on-primary;
+  --pg-highlight-bg: @pg-highlight-light;
+  --pg-scrim: @pg-scrim-light;
+  --pg-shadow-overlay: @pg-shadow-overlay-light;
+  // 圆角五档 + 间距六档（主题无关，入 :root 便于统一消费）
+  --pg-radius-xs: @pg-radius-xs;
+  --pg-radius-sm: @pg-radius-sm;
+  --pg-radius-md: @pg-radius-md;
+  --pg-radius-lg: @pg-radius-lg;
+  --pg-radius-pill: @pg-radius-pill;
+  --pg-space-1: @pg-space-1;
+  --pg-space-2: @pg-space-2;
+  --pg-space-3: @pg-space-3;
+  --pg-space-4: @pg-space-4;
+  --pg-space-5: @pg-space-5;
+  --pg-space-6: @pg-space-6;
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --pg-background: @midnight-background;
-  --pg-surface: @midnight-surface;
-  --pg-surface-2: @midnight-surface-2;
-  --pg-border: @midnight-border;
-  --pg-text: @midnight-text;
-  --pg-secondary: @midnight-secondary;
-  --pg-muted: @midnight-muted;
-  --pg-accent: @midnight-accent;
-  --pg-success: @midnight-success;
-  --pg-warning: @midnight-warning;
-  --pg-danger: @midnight-danger;
+  --pg-bg: @dark-bg;
+  --pg-canvas: @dark-canvas;
+  --pg-surface: @dark-surface;
+  --pg-text: @dark-text;
+  --pg-muted: @dark-muted;
+  --pg-hairline: @dark-hairline;
+  --pg-accent: @dark-accent;
+  --pg-accent-fill: @dark-accent-fill;
+  --pg-accent-hover: @dark-accent-hover;
+  --pg-accent-fill-hover: @dark-accent-fill-hover;
+  --pg-focus: @dark-focus;
+  --pg-danger-text: @dark-danger-text;
+  --pg-danger-fill: @dark-danger-fill;
+  --pg-warning: @dark-warning;
+  --pg-success: @dark-success;
+  --pg-disabled: @dark-disabled;
+  --pg-elevated: @dark-elevated;
+  --pg-highlight-bg: @pg-highlight-dark;
+  --pg-scrim: @pg-scrim-dark;
+  --pg-shadow-overlay: @pg-shadow-overlay-dark;
   color-scheme: dark;
 }

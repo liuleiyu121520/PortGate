@@ -1,4 +1,5 @@
-// 全局基础样式（主题变量经 additionalData 注入）
+// 全局基础样式（UI 重构方案 §4.5 排版 / §4.8 antd 中和与浮层兜底 / §5.5 控件语法；
+// 主题变量经 additionalData 注入）
 * {
   box-sizing: border-box;
 }
@@ -11,19 +12,207 @@ body,
 
 body {
   margin: 0;
-  background-color: var(--pg-background);
+  background-color: var(--pg-bg);
   color: var(--pg-text);
+  // §4.5 字体栈：system-ui 领衔（UI-AC-05），PingFang SC 中文回退
   font-family:
+    system-ui,
     -apple-system,
     BlinkMacSystemFont,
     'SF Pro Text',
     'PingFang SC',
     'Helvetica Neue',
-    'Microsoft YaHei',
     sans-serif;
+  // §4.5 数据面基准：13px/400、行高 20px（1.54 ≥1.4 ✓）
   font-size: 13px;
+  line-height: 20px;
   -webkit-font-smoothing: antialiased;
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+// §4.5 数字等宽工具类（UI-AC-06）：端口/PID/时长/统计数字一律挂 .pg-num
+.pg-num {
+  font-variant-numeric: tabular-nums;
+}
+
+// §4.5 全局键盘焦点环：2px --pg-focus（UI-AC-17 微交互）
+:focus-visible {
+  outline: 2px solid var(--pg-focus);
+  outline-offset: 1px;
+}
+
+// §5.5 按压态微交互：分段段/图标钮/行内按钮挂 .pg-press
+.pg-press {
+  transition: transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+/* ---------- §5.5 操作按钮三级语法（自绘次级 utility，8px 档、28px 最小点击区） ---------- */
+.pg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--pg-hairline);
+  border-radius: var(--pg-radius-sm);
+  background-color: transparent;
+  color: var(--pg-text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+
+  &:disabled {
+    color: var(--pg-disabled);
+    border-color: var(--pg-hairline);
+    cursor: not-allowed;
+  }
+}
+
+// 中性 hover（打开项目目录/复制命令等非破坏性次级钮）：仅描边升一档
+.pg-btn:not(:disabled):hover {
+  border-color: var(--pg-muted);
+}
+
+// 危险升格（行内「结束」/抽屉「结束进程」，§4.1 派生裁定 7 素面语法）：
+// hover/:focus-visible 文字与描边升至 --pg-danger-text，底保持素面不引入 tint
+.pg-btn--terminate:not(:disabled):hover,
+.pg-btn--terminate:not(:disabled):focus-visible {
+  border-color: var(--pg-danger-text);
+  color: var(--pg-danger-text);
+}
+
+// 禁用态外层透明壳（行内 tooltip 锚点，§5.5-2；原生禁用钮不派发鼠标事件）
+.pg-btn-mask {
+  display: inline-flex;
+}
+
+/* ---------- §5.1 页眉图标钮（主题/设置，28×28 pill 圆） ---------- */
+.pg-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--pg-hairline);
+  border-radius: var(--pg-radius-pill);
+  background-color: transparent;
+  color: var(--pg-text);
+  cursor: pointer;
+  // 页眉为拖拽区，交互控件显式豁免（§7.2 no-drag 清单）
+  -webkit-app-region: no-drag;
+  user-select: none;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--pg-muted);
+  }
+
+  &:disabled {
+    color: var(--pg-disabled);
+    cursor: not-allowed;
+  }
+}
+
+/* ---------- antd 运行时投影中和（§4.8；焦点观感统一收敛到 2px outline 焦点环） ---------- */
+.ant-btn:focus,
+.ant-btn:focus-visible,
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+.ant-pagination-item:focus-visible,
+.ant-switch-focused {
+  box-shadow: none;
+}
+
+/* ---------- §5.7 Drawer（右缘贴窗、左缘 18px / canvas 面 / hairline 左缘 / 功能阴影 / scrim 遮罩） ---------- */
+.pg-drawer .ant-drawer-content {
+  border-radius: var(--pg-radius-lg) 0 0 var(--pg-radius-lg);
+  background-color: var(--pg-canvas);
+  border-left: 1px solid var(--pg-hairline);
+  box-shadow: var(--pg-shadow-overlay);
+}
+
+.pg-drawer .ant-drawer-mask {
+  background-color: var(--pg-scrim);
+}
+
+.pg-drawer .ant-drawer-header {
+  background-color: transparent;
+  border-bottom: 1px solid var(--pg-hairline);
+}
+
+.pg-drawer .ant-drawer-title {
+  color: var(--pg-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pg-drawer .ant-drawer-close {
+  color: var(--pg-muted);
+}
+
+/* ---------- §5.8 确认弹窗（18px / elevated 面 / 功能阴影 / scrim 遮罩 / pill 红主钮） ---------- */
+.ant-modal-root .ant-modal-mask {
+  background-color: var(--pg-scrim);
+}
+
+.ant-modal-wrap.pg-confirm .ant-modal-content {
+  border-radius: var(--pg-radius-lg);
+  background-color: var(--pg-elevated);
+  box-shadow: var(--pg-shadow-overlay);
+}
+
+// 红色主按钮唯一出现处（§5.5-3）：pill + --pg-danger-fill + 白字。
+// P1 修复：okType='danger' 经 antd convertLegacyProps 落为「默认危险变体」（红字透明底），
+// 仅刷红底会得到红字压红底；terminate.ts 已改 okType='primary' + okButtonProps={danger:true}
+// （原生白字主按钮变体），此处再显式钉死文字/描边/底三色，白字 × #D70015 = 5.38:1 ≥4.5 ✓
+.pg-confirm .ant-modal-confirm-btns .ant-btn-dangerous {
+  border-color: var(--pg-danger-fill);
+  border-radius: var(--pg-radius-pill);
+  background-color: var(--pg-danger-fill);
+  color: var(--pg-on-primary);
+}
+
+.pg-confirm .ant-modal-confirm-btns .ant-btn-dangerous:not(:disabled):hover,
+.pg-confirm .ant-modal-confirm-btns .ant-btn-dangerous:not(:disabled):active {
+  border-color: var(--pg-danger-fill);
+  background-color: var(--pg-danger-fill);
+  color: var(--pg-on-primary);
+}
+
+/* ---------- §5.8 tooltip（5px 档 / elevated 面 / ink 文字 ≥4.5:1；antd cssinjs 后注入故需 !important） ---------- */
+.ant-tooltip .ant-tooltip-inner {
+  border-radius: var(--pg-radius-xs) !important;
+  background-color: var(--pg-elevated) !important;
+  color: var(--pg-text) !important;
+}
+
+.ant-tooltip .ant-tooltip-arrow::before {
+  background-color: var(--pg-elevated) !important;
+}
+
+/* ---------- §5.8 popover（设置入口，11px 档 / elevated 面 / hairline 描边） ---------- */
+.ant-popover .ant-popover-inner {
+  border: 1px solid var(--pg-hairline) !important;
+  border-radius: var(--pg-radius-md) !important;
+  background-color: var(--pg-elevated) !important;
+  box-shadow: var(--pg-shadow-overlay) !important;
+}
+
+.ant-popover .ant-popover-arrow::before {
+  background-color: var(--pg-elevated) !important;
 }

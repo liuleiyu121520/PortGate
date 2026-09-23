@@ -142,3 +142,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 !.env.example
+
+# UI 重构截图验收产物（方案 §10：验收走查读本地文件，机器相关产物不入库）
+screenshots/
+
+# macOS
+.DS_Store

@@ -1,29 +1,98 @@
-// PortGate 主题色板（需求 §23）。
-// 本文件为 CSS custom properties 的 Less 变量源（构建期注入，见 electron.vite.config.ts）；
-// antd token 用的 JS 镜像见 src/renderer/theme.ts，两处同步维护。
+// PortGate 设计 token 基座（UI 重构方案 §4.1：DESIGN.md alpha 键名对齐的双主题变量全集）。
+// 本文件为 CSS custom properties 的 Less 变量源（构建期经 additionalData 注入，见 electron.vite.config.ts）；
+// antd token 用的 JS 镜像见 src/renderer/theme.ts；
+// 三处同源（本文件 / themes.less / theme.ts）由 tests/unit/design-tokens.test.ts 解析断言恒等。
 
-// Light Theme: Cloud Slate
-@cloud-background: #f6f7f9;
-@cloud-surface: #ffffff;
-@cloud-surface-2: #ffffff;
-@cloud-border: #e7e9ed;
-@cloud-text: #1d2129;
-@cloud-secondary: #667085;
-@cloud-muted: #98a2b3;
-@cloud-accent: #4f6ef7;
-@cloud-success: #22a06b;
-@cloud-warning: #f59e0b;
-@cloud-danger: #e5484d;
+/* ---------- Light（明色：DESIGN.md canvas / canvas-parchment / ink / body-muted / hairline / primary） ---------- */
+// colors.canvas：窗口底色（明色与 canvas 同值）
+@light-bg: #ffffff;
+// colors.canvas：主工作区/表格/抽屉主表面
+@light-canvas: #ffffff;
+// colors.canvas-parchment：条带/行 hover/抽屉内嵌块
+@light-canvas-parchment: #f5f5f7;
+// colors.ink：全部正文与标题
+@light-ink: #1d1d1f;
+// colors.body-muted：次要文本/占位符/表头
+@light-body-muted: #6e6e73;
+// colors.hairline：全部 1px 分隔与描边
+@light-hairline: #e0e0e0;
+// colors.primary：交互文字档；明色下文字档 = 填充档同值
+@light-primary: #0066cc;
+// 派生：hover 加深一档（白字对填充 6.82:1）
+@light-primary-hover: #0059b3;
+// colors.primary-focus：2px 焦点环（对 canvas 4.70，非文本 ≥3 ✓）
+@light-primary-focus: #0071e3;
+// 派生（§4.1 派生裁定 2）：危险文字/描边（对 canvas 5.38 / surface 4.95）
+@light-danger-text: #d70015;
+// 派生：确认弹窗红色主按钮填充（白字对填充 5.38 ✓）
+@light-danger-fill: #d70015;
+// 派生：琥珀（唯一含义 = Exposed，文字档对 canvas 5.02 / surface 4.61 ✓）
+@light-warning: #b45309;
+// 派生：监控状态点（唯一含义，对 surface 3.80 / canvas 4.14，非文本 ≥3 ✓）
+@light-success: #1e8e5a;
+// colors.ink-muted-48：禁用控件文字（对 canvas 4.29 ≥3 ✓）
+@light-disabled: #7a7a7a;
+// 浮层面别名（明色与 canvas 同值）
+@light-elevated: #ffffff;
+// colors.on-primary：填充档按钮上的文字色（白字 × danger-fill = 5.38 ✓，P1 修复新增）
+@pg-on-primary: #ffffff;
 
-// Dark Theme: Midnight Slate（需求 §23 未定义的 Muted/功能色口径见 src/renderer/theme.ts）
-@midnight-background: #17191d;
-@midnight-surface: #1e2126;
-@midnight-surface-2: #24282e;
-@midnight-border: #30343b;
-@midnight-text: #f2f4f7;
-@midnight-secondary: #a7adb7;
-@midnight-muted: #a7adb7;
-@midnight-accent: #6d85ff;
-@midnight-success: #22a06b;
-@midnight-warning: #f59e0b;
-@midnight-danger: #e5484d;
+/* ---------- Dark（暗色：surface-tile 系 / body-on-dark / body-muted / primary-on-dark） ---------- */
+// colors.surface-tile-3：窗口底色/body
+@dark-bg: #252527;
+// colors.surface-tile-1：表格/卡片/抽屉主表面
+@dark-canvas: #272729;
+// colors.surface-tile-2：条带/hover 面/浮层次级
+@dark-surface: #2a2a2c;
+// colors.body-on-dark：正文与标题
+@dark-text: #ffffff;
+// colors.body-muted：次要文本/占位符/表头
+@dark-muted: #cccccc;
+// 派生（§4.1 派生裁定 3）：白色低透明阶分隔线，混合后对三表面均 ≥1.5:1（自设下限 1.2 ✓）
+@dark-hairline: rgba(255, 255, 255, 0.14);
+// colors.primary-on-dark：暗面交互文字档（链接/选中/Tab 选中）
+@dark-accent: #2997ff;
+// 派生（§4.1 派生裁定 1）：暗面按钮填充档（白字对填充 4.70 ✓；文字档仍为 @dark-accent）
+@dark-accent-fill: #0071e3;
+// 派生 hover：文字档（对表面保持 ≥4.5 ✓）
+@dark-accent-hover: #55aaff;
+// 派生 hover：填充档
+@dark-accent-fill-hover: #0069c9;
+// 派生：焦点环（在 primary-on-dark 基础上加亮定档，对 canvas 5.27，非文本 ≥3 ✓）
+@dark-focus: #409cff;
+// 派生：危险文字/描边（Apple 暗面无障碍红，对 canvas 5.29 / surface 5.08 ✓）
+@dark-danger-text: #ff6961;
+// 确认弹窗红主钮填充（与明色恒值，白字 5.38 ✓）
+@dark-danger-fill: #d70015;
+// 派生：琥珀（仅 Exposed，对 canvas 7.26 / surface 6.97 ✓）
+@dark-warning: #ff9f0a;
+// 派生：监控状态点（对 canvas 7.38，非文本 ≥3 ✓）
+@dark-success: #30d158;
+// 派生：禁用文字（对 canvas 3.78 ≥3 ✓）
+@dark-disabled: #808082;
+// 派生：弹窗/popover 浮层面（= surface-tile-2）
+@dark-elevated: #2a2a2c;
+
+/* ---------- 主题无关档：圆角五档 / 间距六档 / 高亮底 / 遮罩 / 唯一功能阴影 ---------- */
+// §4.3 圆角五档（UI-AC-04 断言集合 {0, 5, 8, 11, 18, 9999}）
+@pg-radius-xs: 5px; // ⌘K 键帽、高亮 mark、tooltip、搜索清除钮
+@pg-radius-sm: 8px; // 行内/抽屉次级按钮、弹窗取消钮（次级 utility 族）
+@pg-radius-md: 11px; // 抽屉内嵌块、设置 popover（胶囊外次级控件族）
+@pg-radius-lg: 18px; // Drawer 面板、确认弹窗（卡片/浮层面板族）
+@pg-radius-pill: 9999px; // 搜索框、主按钮、Tab 容器与选中 chip、图标钮、状态点
+// §4.4 间距档（md 定档 16px：8px 栅格对数据工具更稳，密度适配授权范围）
+@pg-space-1: 4px;
+@pg-space-2: 8px;
+@pg-space-3: 12px;
+@pg-space-4: 16px;
+@pg-space-5: 24px;
+@pg-space-6: 32px;
+// §4.1 派生：搜索高亮底（mark；ink 文字于其上 ≈13:1）
+@pg-highlight-light: rgba(0, 102, 204, 0.16);
+@pg-highlight-dark: rgba(41, 151, 255, 0.22);
+// §4.1 派生：浮层遮罩
+@pg-scrim-light: rgba(0, 0, 0, 0.32);
+@pg-scrim-dark: rgba(0, 0, 0, 0.5);
+// §4.1 派生：唯一功能性阴影（浮层，UI-AC-07 显式 token；字面量仅允许出现在本文件）
+@pg-shadow-overlay-light: 0 12px 40px rgba(0, 0, 0, 0.16);
+@pg-shadow-overlay-dark: 0 12px 40px rgba(0, 0, 0, 0.5);

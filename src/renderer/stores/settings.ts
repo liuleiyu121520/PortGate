@@ -46,6 +46,14 @@ export const useSettingsStore = defineStore('settings', {
         applyThemeToDocument(theme)
       }
       return result.ok
+    },
+    /** 设置扫描周期：复用既有 settings:set 的 scanInterval 参数（契约零变更，§5.1 设置入口） */
+    async setScanInterval(interval: ScanInterval): Promise<boolean> {
+      const result = await window.portgate.setSettings({ scanInterval: interval })
+      if (result.ok) {
+        this.scanInterval = interval
+      }
+      return result.ok
     }
   }
 })
