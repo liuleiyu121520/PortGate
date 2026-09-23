@@ -89,6 +89,7 @@ const TOKEN_KEY_TO_VAR: Record<keyof ThemeTokens, string> = {
   success: '--pg-success',
   disabled: '--pg-disabled',
   elevated: '--pg-elevated',
+  onPrimary: '--pg-on-primary',
   highlightBg: '--pg-highlight-bg',
   scrim: '--pg-scrim',
   shadowOverlay: '--pg-shadow-overlay'
@@ -194,6 +195,8 @@ describe('token 三处同源（§4.1：variables.less / themes.less / theme.ts �
     expect(normalize(THEME_TOKENS.dark.dangerFill)).toBe(normalize(THEME_TOKENS.light.dangerFill))
     expect(normalize(THEME_TOKENS.light.bg)).toBe(normalize(THEME_TOKENS.light.canvas))
     expect(normalize(THEME_TOKENS.light.elevated)).toBe(normalize(THEME_TOKENS.light.canvas))
+    expect(normalize(THEME_TOKENS.light.onPrimary)).toBe('#ffffff')
+    expect(normalize(THEME_TOKENS.dark.onPrimary)).toBe('#ffffff')
   })
 })
 

@@ -187,9 +187,19 @@ async function verifyDevSmoke(): Promise<void> {
       try {
         const html = document.documentElement
         const themeBefore = html.dataset.theme || 'unset'
-        const antdRendered = Boolean(
-          document.querySelector('.ant-table') && document.querySelector('.ant-switch')
-        )
+        // antd 渲染核验（v1.2 后 a-switch 已废除）：.ant-table（常驻）+ 点击设置入口验证
+        // .ant-popover 浮层渲染，随后收起；语义不变（验证 antd 在 CSP 下正常渲染）
+        const tableOk = Boolean(document.querySelector('.ant-table'))
+        let popoverOk = false
+        const settingsTrigger = document.querySelector('.pg-settings-trigger')
+        if (settingsTrigger) {
+          settingsTrigger.click()
+          await new Promise((r) => setTimeout(r, 400))
+          popoverOk = Boolean(document.querySelector('.ant-popover'))
+          settingsTrigger.click()
+          await new Promise((r) => setTimeout(r, 200))
+        }
+        const antdRendered = tableOk && popoverOk
         const bridge = window.portgate
         const smoke = window.__portgateDevSmoke
         if (!bridge || !smoke) {

@@ -93,16 +93,19 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('表格列结构（UI-AC-13 / D-UI-04）', () => {
-  it('列头为中文六项，且全表头无 PROJECT 与全大写英文', async () => {
+describe('表格列结构（UI-AC-13 / D-UI-04；v1.2 双语表头）', () => {
+  it('表头双语双行堆叠：EN 主行大写 + CN 辅助行，无 PROJECT 列', async () => {
     const { wrapper } = await mountApp({ records: [RECORD_WITH_PROJECT], matches: {} })
-    const headers = wrapper.findAll('.ant-table-thead th').map((th) => th.text().trim())
-    for (const label of ['端口', '进程', '应用', '地址', '运行时长', '操作']) {
-      expect(headers).toContain(label)
+    const headerEn = wrapper.findAll('.pg-th__en').map((el) => el.text().trim())
+    const headerCn = wrapper.findAll('.pg-th__cn').map((el) => el.text().trim())
+    // 双表常驻（v-show）：当前表 6 对 + 历史表 4 对
+    for (const en of ['PORT', 'PROCESS', 'APP', 'ADDRESS', 'UPTIME', 'ACTION', 'INTERVAL', 'DURATION']) {
+      expect(headerEn).toContain(en)
     }
-    for (const banned of ['PROJECT', 'PORT', 'PROCESS', 'APP', 'ADDRESS', 'UPTIME', 'ACTION']) {
-      expect(headers).not.toContain(banned)
+    for (const cn of ['端口', '进程', '应用', '地址', '运行时长', '操作', '时间区间', '时长']) {
+      expect(headerCn).toContain(cn)
     }
+    expect(headerEn).not.toContain('PROJECT')
     wrapper.unmount()
   })
 
@@ -205,11 +208,11 @@ describe('分段控件与交互语法（UI-AC-19/17）', () => {
   })
 })
 
-describe('统计条（UI-AC-23）', () => {
-  it('中文标签 + 中点分隔；exposed=0 时对外项恒中性', async () => {
+describe('统计条（UI-AC-23；v1.2 双语标签）', () => {
+  it('EN 主标签 + CN 辅助（TCP/UDP 豁免）；exposed=0 时对外项恒中性', async () => {
     const { wrapper, portsStore } = await mountApp({ records: [RECORD_WITH_PROJECT], matches: {} })
     const statsText = wrapper.find('.pg-stats').text()
-    for (const label of ['端口', 'TCP', 'UDP', '对外']) {
+    for (const label of ['Ports', '端口数', 'TCP', 'UDP', 'Exposed', '对外']) {
       expect(statsText).toContain(label)
     }
     expect(portsStore.stats.exposed).toBe(0)

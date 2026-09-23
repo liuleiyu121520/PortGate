@@ -10,9 +10,10 @@ import ThemeToggle from './components/ThemeToggle.vue'
 import { usePortsStore } from './stores/ports'
 import { useSettingsStore } from './stores/settings'
 import { useTerminate } from './composables/terminate'
-import { COLUMN_DEFS, COPY, SEP, fill } from './copy'
+import { COPY, SEP, STATS_LABELS, TABLE_COLUMNS, HISTORY_COLUMNS, fill } from './copy'
 import { FONT_STACK, PG_RADIUS, THEME_TOKENS } from './theme'
 import { TITLEBAR_MODE } from '../shared/constants'
+import type { BilingualColumnDef, BilingualLabel } from './copy'
 import type {
   HighlightRange,
   PortRecord,
@@ -68,17 +69,17 @@ const antdThemeConfig = computed(() => {
 })
 
 interface StatItem {
-  label: string
+  label: BilingualLabel
   value: number
   exposed: boolean
 }
 
-// 统计条（§5.2：中文标签 12px muted + 数字 13px/600 ink；琥珀仅 Exposed>0，全量口径不随搜索变化）
+// 统计条（§5.2 v1.2：EN 主标签 12px muted + CN 辅助 11px/400 muted；琥珀仅 Exposed>0，全量口径不随搜索变化）
 const statsItems = computed<StatItem[]>(() => [
-  { label: COPY.stats.labels.total, value: portsStore.stats.total, exposed: false },
-  { label: COPY.stats.labels.tcp, value: portsStore.stats.tcp, exposed: false },
-  { label: COPY.stats.labels.udp, value: portsStore.stats.udp, exposed: false },
-  { label: COPY.stats.labels.exposed, value: portsStore.stats.exposed, exposed: true }
+  { label: STATS_LABELS.total, value: portsStore.stats.total, exposed: false },
+  { label: STATS_LABELS.tcp, value: portsStore.stats.tcp, exposed: false },
+  { label: STATS_LABELS.udp, value: portsStore.stats.udp, exposed: false },
+  { label: STATS_LABELS.exposed, value: portsStore.stats.exposed, exposed: true }
 ])
 
 interface TabItem {
@@ -117,15 +118,16 @@ interface UiColumn {
   title: string
   key: string
   width?: number
+  label: BilingualLabel
 }
 
-function toUiColumns(defs: readonly { key: string; label: string; width?: number }[]): UiColumn[] {
-  return defs.map((def) => ({ title: def.label, key: def.key, width: def.width }))
+// 列定义单一来源（§5.4/§8 v1.2：copy.ts 双语列定名表；表头经 headerCell 插槽双行堆叠渲染）
+function toUiColumns(defs: readonly BilingualColumnDef[]): UiColumn[] {
+  return defs.map((def) => ({ title: def.label.en, key: def.key, width: def.width, label: def.label }))
 }
 
-// 列定义单一来源（§5.4/§8：copy.ts COLUMN_DEFS；PROJECT 列并入进程列，D-UI-04）
-const currentColumns: UiColumn[] = toUiColumns(COLUMN_DEFS.current)
-const historyColumns: UiColumn[] = toUiColumns(COLUMN_DEFS.history)
+const currentColumns: UiColumn[] = toUiColumns(TABLE_COLUMNS)
+const historyColumns: UiColumn[] = toUiColumns(HISTORY_COLUMNS)
 
 function sessionInterval(session: PortSession): string {
   const end = session.closedAt ?? session.lastSeenAt
@@ -261,7 +263,7 @@ function addressTooltip(record: PortRecord): string {
       <div class="pg-stats">
         <template
           v-for="(stat, index) in statsItems"
-          :key="stat.label"
+          :key="stat.label.en"
         >
           <span
             v-if="index > 0"
@@ -271,7 +273,10 @@ function addressTooltip(record: PortRecord): string {
             class="pg-stats__item"
             :class="{ 'pg-stats__item--exposed': stat.exposed && portsStore.stats.exposed > 0 }"
           >
-            <span class="pg-stats__label">{{ stat.label }}</span>
+            <span class="pg-stats__label">{{ stat.label.en }}<span
+              v-if="stat.label.cn !== null"
+              class="pg-stats__label-cn"
+            >{{ stat.label.cn }}</span></span>
             <span class="pg-stats__value pg-num">{{ stat.value }}</span>
           </span>
         </template>
@@ -309,6 +314,15 @@ function addressTooltip(record: PortRecord): string {
             class="pg-table"
             :custom-row="(record: PortRecord) => ({ onClick: () => openDrawer(record), class: 'pg-table__row' })"
           >
+            <template #headerCell="{ column }">
+              <span class="pg-th">
+                <span class="pg-th__en">{{ column.label.en }}</span>
+                <span
+                  v-if="column.label.cn !== null"
+                  class="pg-th__cn"
+                >{{ column.label.cn }}</span>
+              </span>
+            </template>
             <template #emptyText>
               <div class="pg-empty">
                 <p class="pg-empty__title">
@@ -333,7 +347,7 @@ function addressTooltip(record: PortRecord): string {
                 <span
                   v-if="isExposed(record)"
                   class="pg-exposed-tag"
-                >{{ COPY.stats.labels.exposed }}</span>
+                >{{ STATS_LABELS.exposed.cn }}</span>
               </template>
               <template v-else-if="column.key === 'process'">
                 <HighlightText
@@ -421,6 +435,15 @@ function addressTooltip(record: PortRecord): string {
             table-layout="fixed"
             class="pg-table"
           >
+            <template #headerCell="{ column }">
+              <span class="pg-th">
+                <span class="pg-th__en">{{ column.label.en }}</span>
+                <span
+                  v-if="column.label.cn !== null"
+                  class="pg-th__cn"
+                >{{ column.label.cn }}</span>
+              </span>
+            </template>
             <template #emptyText>
               <div class="pg-empty">
                 <p class="pg-empty__title">
@@ -581,6 +604,14 @@ function addressTooltip(record: PortRecord): string {
     font-size: 12px;
   }
 
+  // §5.2 v1.2 双语辅助：CN 11px/400 muted
+  &__label-cn {
+    margin-left: 4px;
+    color: var(--pg-muted);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
   &__value {
     margin-left: 4px;
     color: var(--pg-text);
@@ -648,14 +679,12 @@ function addressTooltip(record: PortRecord): string {
     background-color: transparent;
   }
 
-  // 表头：中文 12px/600 muted、无大写变换、底 hairline（UI-AC-14/22）
+  // 表头容器：双语双行堆叠由 .pg-th 承载；底 hairline（UI-AC-14）；带高 8+16+2+14+8 = 48px（§5.4 v1.2 核定）
   :deep(.ant-table-thead > tr > th) {
     padding: 8px 12px;
     background-color: transparent;
     border-bottom: 1px solid var(--pg-hairline);
     color: var(--pg-muted);
-    font-size: 12px;
-    font-weight: 600;
     user-select: none;
   }
 
@@ -681,6 +710,28 @@ function addressTooltip(record: PortRecord): string {
 
   :deep(.pg-table__row) {
     cursor: pointer;
+  }
+}
+
+/* ---------- §5.4 v1.2 双语表头（两行堆叠：EN 主行 12px/600 muted + CN 辅助行 11px/400 muted；带高 8+16+2+14+8 = 48px） ---------- */
+.pg-th {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  user-select: none;
+
+  &__en {
+    color: var(--pg-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+  }
+
+  &__cn {
+    color: var(--pg-muted);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 14px;
   }
 }
 

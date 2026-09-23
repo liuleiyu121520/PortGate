@@ -19,7 +19,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { app, type BrowserWindow } from 'electron'
@@ -264,7 +264,23 @@ async function clickFirstRow(window: BrowserWindow): Promise<boolean> {
   if (!clicked) {
     return false
   }
-  return waitForDom(window, `document.querySelector('.pg-drawer.ant-drawer-open')`, '抽屉打开')
+  // ant-drawer-open 在滑入动画开始即挂上；补「停靠判定」：wrapper x 连续两次采样一致
+  // （transform 过渡完成、位置稳定）才截图，防止抽屉半途状态入镜（视觉终验返工项）
+  await waitForDom(window, `document.querySelector('.pg-drawer.ant-drawer-open')`, '抽屉打开')
+  let lastX = -1
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const x = await evalJs<number>(
+      window,
+      `document.querySelector('.pg-drawer .ant-drawer-content-wrapper')?.getBoundingClientRect().x ?? -1`
+    )
+    if (x >= 0 && x === lastX) {
+      break
+    }
+    lastX = x
+    await sleep(150)
+  }
+  await nextFrame(window)
+  return true
 }
 
 async function closeDrawer(window: BrowserWindow): Promise<void> {
@@ -285,12 +301,13 @@ async function closeDrawer(window: BrowserWindow): Promise<void> {
   await sleep(300)
 }
 
-/** 点击指定端口行（force 流程）或首个可用行的「结束」，等待确认弹窗出现 */
+/** 点击指定端口行（force 流程）或首个可用行（port=null：全表扫描首个非禁用「结束」，§5.5 三级语法）的确认弹窗 */
 async function openTerminateConfirm(window: BrowserWindow, port: number | null): Promise<boolean> {
   const clicked = await evalJs<boolean>(
     window,
     `(() => {
-      const rows = ${port === null ? '[document.querySelector(`.pg-table__row`)].filter(Boolean)' : `[...document.querySelectorAll('.pg-table__row')].filter((el) => el.textContent?.includes(${JSON.stringify(String(port))}))`}
+      const allRows = [...document.querySelectorAll('.pg-table__row')]
+      const rows = ${port === null ? 'allRows' : `allRows.filter((el) => el.textContent?.includes(${JSON.stringify(String(port))}))`}
       const btn = rows.map((row) => row.querySelector('.pg-btn--terminate:not(:disabled)')).find(Boolean)
       if (!btn) return false
       btn.click()
@@ -300,33 +317,67 @@ async function openTerminateConfirm(window: BrowserWindow, port: number | null):
   if (!clicked) {
     return false
   }
-  return waitForDom(window, `document.querySelector('.pg-confirm .ant-modal-confirm')`, '确认弹窗出现')
+  return waitForDom(
+    window,
+    `${visibleConfirmCountExpr(CONFIRM_MODAL_TITLE)} > 0`,
+    '确认弹窗出现'
+  )
 }
 
-/** 可见确认弹窗判定（几何可见性，机制无关：antd 关闭后可能保留 DOM 或以样式隐藏） */
-const VISIBLE_CONFIRM_EXPR =
-  `[...document.querySelectorAll('.pg-confirm .ant-modal-confirm')].filter((el) => ` +
-  `el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none').length`
-
-/** 可见设置 popover 判定（机制无关 + 全实例 some()：antd 可能保留隐藏实例，first-match 会被陈旧节点欺骗） */
+/**
+ * 确认弹窗定位/收口（机制无关）：
+ * - antd-vue 关闭后的 confirm 弹窗会短暂保留 DOM 且 wrap 不立即 display:none（真机诊断证实），
+ *   几何判定须叠加 rect 尺寸 + visibility；点击目标取「标题匹配的最新实例」（.at(-1)），
+ *   避免命中已关闭实例的存活处理器造成动作双发；
+ * - 收口等待按「该标题的可见弹窗数 === 0」；最终失败兜底内联隐藏全部确认 wrap，保证后续截图干净。
+ */
+/** 可见设置 popover 判定（全实例 some()：antd 可能保留隐藏实例，first-match 会被陈旧节点欺骗） */
 const VISIBLE_POPOVER_EXPR =
   `[...document.querySelectorAll('.pg-popover')].some((el) => ` +
   `el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none')`
 
-/** 点击可见确认弹窗按钮并等待其收口。
- * 单击 + 长耐心等待（20s ≫ SIGKILL 校验链路耗时）：盲目快速重试会在动作在途时双发
- * （第二发命中已消失记录 → 「记录已消失」toast 污染后续截图），仅超时后才补点一次。 */
-async function clickModalButton(window: BrowserWindow, kind: 'cancel' | 'danger'): Promise<boolean> {
+/** 确认弹窗标题（与 renderer COPY.messages 同文，capture 侧独立常量） */
+const CONFIRM_MODAL_TITLE = '结束进程'
+
+const CONFIRM_FILTER_SNIPPET = `
+  function visibleConfirms(title) {
+    const out = []
+    for (const el of document.querySelectorAll('.pg-confirm .ant-modal-confirm')) {
+      if (!(el.getClientRects().length > 0)) continue
+      const cs = getComputedStyle(el)
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue
+      const rect = el.getBoundingClientRect()
+      if (rect.width < 100 || rect.height < 60) continue
+      out.push({
+        el,
+        title: (el.querySelector('.ant-modal-confirm-title')?.textContent ?? '').trim()
+      })
+    }
+    return title === null ? out : out.filter((modal) => modal.title === title)
+  }
+`
+
+function visibleConfirmCountExpr(title: string | null): string {
+  return `(() => {
+    ${CONFIRM_FILTER_SNIPPET}
+    return visibleConfirms(${JSON.stringify(title)}).length
+  })()`
+}
+
+/** 点击指定标题的最新可见确认弹窗按钮（title=null 取任意最新）并等待该类弹窗收口 */
+async function clickModalButton(
+  window: BrowserWindow,
+  kind: 'cancel' | 'danger',
+  title: string | null = null
+): Promise<boolean> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const clicked = await evalJs<boolean>(
       window,
       `(() => {
-        const visible = [...document.querySelectorAll('.pg-confirm .ant-modal-confirm')].filter((el) =>
-          el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none'
-        )
-        const btn = visible
-          .map((modal) => modal.querySelector(${JSON.stringify(kind === 'cancel' ? '.ant-btn:not(.ant-btn-dangerous)' : '.ant-btn-dangerous')}))
-          .find(Boolean)
+        ${CONFIRM_FILTER_SNIPPET}
+        const modal = visibleConfirms(${JSON.stringify(title)}).at(-1)
+        if (!modal) return false
+        const btn = modal.el.querySelector(${JSON.stringify(kind === 'cancel' ? '.ant-btn:not(.ant-btn-dangerous)' : '.ant-btn-dangerous')})
         if (!btn) return false
         btn.click()
         return true
@@ -337,27 +388,34 @@ async function clickModalButton(window: BrowserWindow, kind: 'cancel' | 'danger'
     }
     const closed = await waitForDom(
       window,
-      `${VISIBLE_CONFIRM_EXPR} === 0`,
-      `弹窗按钮 ${kind} 收口`,
+      `${visibleConfirmCountExpr(title)} === 0`,
+      `弹窗（${title ?? '任意'}）按钮 ${kind} 收口`,
       20000
     )
     if (closed) {
       return true
     }
-    log(`弹窗按钮 ${kind} 第 ${attempt} 次点击未收口，重试`)
+    log(`弹窗（${title ?? '任意'}）按钮 ${kind} 第 ${attempt} 次点击未收口，重试`)
   }
+  // 兜底：内联隐藏全部确认 wrap（dev 采集保证截图干净；antd 后续 open 会新建节点）
+  await evalJs(
+    window,
+    `[...document.querySelectorAll('.ant-modal-wrap.pg-confirm')].forEach((el) => { el.style.display = 'none' })`
+  )
+  await nextFrame(window)
+  log(`弹窗按钮 ${kind} 收口失败，已内联隐藏全部确认 wrap 兜底`)
   return false
 }
 
-/** 仅触发确认弹窗的红色 OK（PENDING_FORCE 会顶上二次弹窗，不等待收口） */
-async function clickConfirmOkFireAndForget(window: BrowserWindow): Promise<boolean> {
+/** 仅触发确认弹窗的红色 OK（PENDING_FORCE 会顶上二次弹窗，不等待收口）；目标 = 标题匹配的最新实例 */
+async function clickConfirmOkFireAndForget(window: BrowserWindow, title: string): Promise<boolean> {
   return evalJs<boolean>(
     window,
     `(() => {
-      const visible = [...document.querySelectorAll('.pg-confirm .ant-modal-confirm')].filter((el) =>
-        el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none'
-      )
-      const btn = visible.map((modal) => modal.querySelector('.ant-btn-dangerous')).find(Boolean)
+      ${CONFIRM_FILTER_SNIPPET}
+      const modal = visibleConfirms(${JSON.stringify(title)}).at(-1)
+      if (!modal) return false
+      const btn = modal.el.querySelector('.ant-btn-dangerous')
       if (!btn) return false
       btn.click()
       return true
@@ -367,7 +425,7 @@ async function clickConfirmOkFireAndForget(window: BrowserWindow): Promise<boole
 
 /** 兜底收口：若有可见确认弹窗残留则点取消并等待消失 */
 async function dismissConfirmModal(window: BrowserWindow): Promise<void> {
-  if (await evalJs<boolean>(window, `${VISIBLE_CONFIRM_EXPR} > 0`)) {
+  if (await evalJs<boolean>(window, `${visibleConfirmCountExpr(null)} > 0`)) {
     await clickModalButton(window, 'cancel')
   }
 }
@@ -535,8 +593,8 @@ async function captureThemeStates(
 
   if (await openTerminateConfirm(window, null)) {
     await shot(window, '05-confirm', theme, outputDir, results, STATE_ANCHORS['05-confirm'])
-    // 点取消，不终止任何真实进程
-    await clickModalButton(window, 'cancel')
+    // 点取消，不终止任何真实进程（标题匹配目标弹窗，避免陈旧实例劫持点击）
+    await clickModalButton(window, 'cancel', CONFIRM_MODAL_TITLE)
   } else {
     results.push({ file: `05-confirm-${theme}.png`, state: '05-confirm', theme, anchor: STATE_ANCHORS['05-confirm'], ok: false, note: '无 USER 级行，改道人工采集' })
   }
@@ -590,7 +648,7 @@ async function captureForceState(
     return
   }
   // 触发 OK 但不等待收口：PENDING_FORCE 时二次弹窗（同为 .pg-confirm）会立即顶上
-  if (!(await clickConfirmOkFireAndForget(window))) {
+  if (!(await clickConfirmOkFireAndForget(window, CONFIRM_MODAL_TITLE))) {
     miss('确认弹窗 OK 点击失败')
     await dismissConfirmModal(window)
     await driveSearch(window, '')
@@ -612,8 +670,8 @@ async function captureForceState(
     return
   }
   await shot(window, '06-force', theme, outputDir, results, STATE_ANCHORS['06-force'])
-  // 点击「强制结束」收尾（SIGKILL 由主进程 KillPolicy 执行），等待全部弹窗关闭并等 toast 消散
-  await clickModalButton(window, 'danger')
+  // 点击「强制结束」收尾（SIGKILL 由主进程 KillPolicy 执行），按标题等待该弹窗收口并等 toast 消散
+  await clickModalButton(window, 'danger', FORCE_MODAL_TITLE)
   await waitForToastsGone(window)
   await driveSearch(window, '')
 }
@@ -659,6 +717,28 @@ function writeManifest(outputDir: string, results: CaptureResult[]): void {
   )
 }
 
+/** 定向重采：读取既有 manifest 并按文件名合并替换（其余条目原样保留，PORTGATE_CAPTURE_ONLY 模式） */
+function mergeManifest(outputDir: string, incoming: CaptureResult[]): void {
+  let prior: CaptureResult[] = []
+  try {
+    const raw = JSON.parse(readFileSync(join(outputDir, 'manifest.json'), 'utf-8')) as {
+      results?: CaptureResult[]
+    }
+    prior = Array.isArray(raw.results) ? raw.results : []
+  } catch {
+    // 既有 manifest 缺失/损坏时视为空（定向模式依赖全量产物先行存在）
+  }
+  for (const item of incoming) {
+    const index = prior.findIndex((existing) => existing.file === item.file)
+    if (index >= 0) {
+      prior[index] = item
+    } else {
+      prior.push(item)
+    }
+  }
+  writeManifest(outputDir, prior)
+}
+
 /**
  * 采集入口（main/index.ts 在 PORTGATE_CAPTURE=1 且 dev 下调用）：
  * 全部状态采集完成后自动 app.quit() 收口（SMOKE 探针惯例），并恢复采集前主题。
@@ -678,6 +758,37 @@ export async function runUiCapture(deps: UiCaptureDeps): Promise<void> {
   )
 
   try {
+    // 定向重采（PORTGATE_CAPTURE_ONLY=<状态>-<主题>，如 03-drawer-dark）：
+    // 仅重采指定状态并按文件名合并回既有 manifest，其余 23 张不动
+    const onlySpec = process.env.PORTGATE_CAPTURE_ONLY?.trim() ?? null
+    if (onlySpec !== null) {
+      const theme: 'dark' | 'light' = onlySpec.endsWith('-dark') ? 'dark' : 'light'
+      const stateId = onlySpec.slice(0, onlySpec.lastIndexOf('-'))
+      log(`定向重采：${stateId}（${theme}）`)
+      await setTheme(window, theme)
+      await resetUi(window)
+      if (stateId === '03-drawer') {
+        if (await clickFirstRow(window)) {
+          await shot(window, '03-drawer', theme, outputDir, results, STATE_ANCHORS['03-drawer'])
+          await closeDrawer(window)
+        } else {
+          results.push({
+            file: `03-drawer-${theme}.png`,
+            state: '03-drawer',
+            theme,
+            anchor: STATE_ANCHORS['03-drawer'],
+            ok: false,
+            note: '无可用行'
+          })
+        }
+      } else {
+        log(`定向模式暂不支持状态 ${stateId}（当前仅支持 03-drawer）`)
+      }
+      mergeManifest(outputDir, results)
+      log(`定向重采完成：${results.filter((item) => item.ok).length}/${results.length} 张`)
+      return
+    }
+
     // 历史会话构造：起 → 入快照（PORT_OPENED 落库）→ 停 → 收口（PORT_CLOSED 写 closed_at）
     historyServer = await startHttpServer(HISTORY_PORT)
     if (await waitForPortPid(portManager, HISTORY_PORT, null, true)) {

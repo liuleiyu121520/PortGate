@@ -1,28 +1,17 @@
 <script setup lang="ts">
-import type { ScanInterval } from '../../shared/types'
-import { COPY } from '../copy'
+import { COPY, SETTINGS } from '../copy'
 import { useSettingsStore } from '../stores/settings'
 
 /**
  * 页眉设置入口（UI 重构方案 §5.1，D-UI-07/UI-AC-21 的最小实现，§11.4 范围解释登记）：
- * popover（11px 档 / elevated 面 / hairline）承载扫描周期三档分段（1 秒 / 2 秒 / 5 秒），
+ * popover（11px 档 / elevated 面 / hairline）承载「Scan Interval 扫描周期」双语标签
+ * （§8.2 设置组）+ 扫描周期三档分段（「1 秒 / 2 秒 / 5 秒」，MINOR-UIR3-004 裁定值形态），
  * 经既有 settings:set 的 scanInterval 参数写入（1000/2000/5000 校验在 main 侧不变，
  * 无新设置项 / 无新 channel / 无存储变更）。
  */
 const settingsStore = useSettingsStore()
 
-interface IntervalOption {
-  value: ScanInterval
-  label: string
-}
-
-const INTERVAL_OPTIONS: readonly IntervalOption[] = [
-  { value: 1000, label: COPY.settings.interval1s },
-  { value: 2000, label: COPY.settings.interval2s },
-  { value: 5000, label: COPY.settings.interval5s }
-]
-
-function onSelect(value: ScanInterval): void {
+function onSelect(value: (typeof SETTINGS.intervalOptions)[number]['value']): void {
   void settingsStore.setScanInterval(value)
 }
 </script>
@@ -36,11 +25,12 @@ function onSelect(value: ScanInterval): void {
     <template #content>
       <div class="pg-settings">
         <p class="pg-settings__label">
-          {{ COPY.settings.scanIntervalLabel }}
+          <span class="pg-settings__label-en">{{ SETTINGS.scanIntervalLabel.en }}</span>
+          <span class="pg-settings__label-cn">{{ SETTINGS.scanIntervalLabel.cn }}</span>
         </p>
         <div class="pg-settings__options">
           <button
-            v-for="option in INTERVAL_OPTIONS"
+            v-for="option in SETTINGS.intervalOptions"
             :key="option.value"
             class="pg-settings__opt"
             :class="{ 'pg-settings__opt--active': settingsStore.scanInterval === option.value }"
@@ -51,7 +41,7 @@ function onSelect(value: ScanInterval): void {
           </button>
         </div>
         <p class="pg-settings__hint">
-          {{ COPY.settings.hint }}
+          {{ SETTINGS.hint }}
         </p>
       </div>
     </template>
@@ -96,11 +86,25 @@ function onSelect(value: ScanInterval): void {
 .pg-settings {
   min-width: 180px;
 
+  // §5.1 v1.2：双语标签内联——EN 主行 12px/600 muted + CN 辅助 11px/400 muted
   &__label {
+    display: flex;
+    gap: 4px;
+    align-items: baseline;
     margin: 0 0 8px;
+    color: var(--pg-muted);
+  }
+
+  &__label-en {
     color: var(--pg-muted);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  &__label-cn {
+    color: var(--pg-muted);
+    font-size: 11px;
+    font-weight: 400;
   }
 
   &__options {

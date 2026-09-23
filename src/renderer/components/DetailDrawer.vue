@@ -2,14 +2,16 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { HighlightRange, PortRecord, SearchMatchInfo } from '../../shared/types'
-import { COPY, SEP, fill } from '../copy'
+import { COPY, DRAWER_FIELDS, DRAWER_SECTIONS, SEP, fill } from '../copy'
 import HighlightText from './HighlightText.vue'
 import { useTerminate } from '../composables/terminate'
 import { formatClock, formatDuration } from '../utils/format'
 
 /**
- * 端口详情 Drawer（UI 重构方案 §5.7，480px）：应用与项目 / 网络 / 进程 / 时间 / 运行时 五区，
- * 中文分区标题（废除大写英文）、11px 内嵌块、左缘 18px 面板（base.less .pg-drawer 承载）。
+ * 端口详情 Drawer（UI 重构方案 §5.7，480px；v1.2 双语内联）：应用与项目 / 网络 / 进程 / 时间 /
+ * 运行时 五区——分区标题 EN 主行 12px/600 muted + CN 辅助 11px/400 muted 同行内联
+ * （首区「APPLICATION / PROJECT 应用与项目」，五区同语法无特例）；dt 双语同行内联
+ * （EN 12px/400 muted 原样大小写 + CN 11px/400 muted），dt 定宽 156px（宽度推算 §5.7）。
  * 操作按钮三级语法：打开项目目录 / 复制命令（中性次级）+ 结束进程（中性 ghost、hover 红升格；
  * 保护进程禁用 + 行内常显原因）。record:reveal / clipboard 逻辑零改动；命中高亮沿用
  * HighlightText 唯一实现；remote 存在时地址以 → 连接（SEP.ARROW）。
@@ -28,6 +30,10 @@ const { confirmTerminate } = useTerminate(() => {
   // 终止成功后主进程触发即时重扫，DIFF 局部刷新列表；关闭 Drawer 避免展示已消失记录
   emit('close')
 })
+
+// 双语定名表快捷引用（§8.2；copy-contract 六组逐对断言的消费端）
+const S = DRAWER_SECTIONS
+const F = DRAWER_FIELDS
 
 const now = ref(Date.now())
 let ticker: ReturnType<typeof setInterval> | null = null
@@ -121,11 +127,17 @@ async function onCopyCommand(): Promise<void> {
     >
       <section class="pg-drawer__section">
         <h4 class="pg-drawer__heading">
-          {{ COPY.drawer.sections.appProject }}
+          <span class="pg-drawer__heading-en">{{ S.appProject.en }}</span>
+          <span class="pg-drawer__heading-cn">{{ S.appProject.cn }}</span>
         </h4>
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.application }}</dt>
+            <dt>
+              {{ F.application.en }}<span
+                v-if="F.application.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.application.cn }}</span>
+            </dt>
             <dd>
               <HighlightText
                 v-if="record.application !== undefined"
@@ -136,7 +148,12 @@ async function onCopyCommand(): Promise<void> {
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.project }}</dt>
+            <dt>
+              {{ F.project.en }}<span
+                v-if="F.project.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.project.cn }}</span>
+            </dt>
             <dd>
               <HighlightText
                 v-if="record.project !== undefined"
@@ -151,11 +168,17 @@ async function onCopyCommand(): Promise<void> {
 
       <section class="pg-drawer__section">
         <h4 class="pg-drawer__heading">
-          {{ COPY.drawer.sections.network }}
+          <span class="pg-drawer__heading-en">{{ S.network.en }}</span>
+          <span class="pg-drawer__heading-cn">{{ S.network.cn }}</span>
         </h4>
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.port }}</dt>
+            <dt>
+              {{ F.port.en }}<span
+                v-if="F.port.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.port.cn }}</span>
+            </dt>
             <dd class="pg-num">
               <HighlightText
                 :text="String(record.localPort)"
@@ -164,7 +187,12 @@ async function onCopyCommand(): Promise<void> {
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.address }}</dt>
+            <dt>
+              {{ F.address.en }}<span
+                v-if="F.address.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.address.cn }}</span>
+            </dt>
             <dd class="pg-num">
               <HighlightText
                 :text="record.localAddress"
@@ -175,15 +203,30 @@ async function onCopyCommand(): Promise<void> {
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.protocol }}</dt>
+            <dt>
+              {{ F.protocol.en }}<span
+                v-if="F.protocol.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.protocol.cn }}</span>
+            </dt>
             <dd>{{ record.protocol }}</dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.state }}</dt>
+            <dt>
+              {{ F.state.en }}<span
+                v-if="F.state.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.state.cn }}</span>
+            </dt>
             <dd>{{ record.state ?? COPY.table.emptyValue }}</dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.exposure }}</dt>
+            <dt>
+              {{ F.exposure.en }}<span
+                v-if="F.exposure.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.exposure.cn }}</span>
+            </dt>
             <dd>{{ exposure }}</dd>
           </div>
         </dl>
@@ -191,27 +234,48 @@ async function onCopyCommand(): Promise<void> {
 
       <section class="pg-drawer__section">
         <h4 class="pg-drawer__heading">
-          {{ COPY.drawer.sections.process }}
+          <span class="pg-drawer__heading-en">{{ S.process.en }}</span>
+          <span class="pg-drawer__heading-cn">{{ S.process.cn }}</span>
         </h4>
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.pid }}</dt>
+            <dt>
+              {{ F.pid.en }}<span
+                v-if="F.pid.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.pid.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ record.pid }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.ppid }}</dt>
+            <dt>
+              {{ F.ppid.en }}<span
+                v-if="F.ppid.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.ppid.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ record.process.ppid ?? COPY.table.emptyValue }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.user }}</dt>
+            <dt>
+              {{ F.user.en }}<span
+                v-if="F.user.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.user.cn }}</span>
+            </dt>
             <dd>{{ record.process.user ?? COPY.table.emptyValue }}</dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.executable }}</dt>
+            <dt>
+              {{ F.executable.en }}<span
+                v-if="F.executable.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.executable.cn }}</span>
+            </dt>
             <dd class="pg-drawer__mono">
               <HighlightText
                 :text="record.process.executablePath ?? COPY.table.emptyValue"
@@ -220,7 +284,12 @@ async function onCopyCommand(): Promise<void> {
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.command }}</dt>
+            <dt>
+              {{ F.command.en }}<span
+                v-if="F.command.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.command.cn }}</span>
+            </dt>
             <dd class="pg-drawer__mono">
               <HighlightText
                 :text="record.process.commandLine ?? COPY.table.emptyValue"
@@ -229,7 +298,12 @@ async function onCopyCommand(): Promise<void> {
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.workingDir }}</dt>
+            <dt>
+              {{ F.workingDir.en }}<span
+                v-if="F.workingDir.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.workingDir.cn }}</span>
+            </dt>
             <dd class="pg-drawer__mono">
               <HighlightText
                 :text="record.process.workingDirectory ?? COPY.table.emptyValue"
@@ -242,35 +316,61 @@ async function onCopyCommand(): Promise<void> {
 
       <section class="pg-drawer__section">
         <h4 class="pg-drawer__heading">
-          {{ COPY.drawer.sections.time }}
+          <span class="pg-drawer__heading-en">{{ S.time.en }}</span>
+          <span class="pg-drawer__heading-cn">{{ S.time.cn }}</span>
         </h4>
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.processStart }}</dt>
+            <dt>
+              {{ F.processStart.en }}<span
+                v-if="F.processStart.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.processStart.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ record.process.startedAt !== undefined ? formatClock(record.process.startedAt) : COPY.table.emptyValue }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.uptime }}</dt>
+            <dt>
+              {{ F.uptime.en }}<span
+                v-if="F.uptime.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.uptime.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ record.process.startedAt !== undefined ? formatDuration(now - record.process.startedAt) : COPY.table.emptyValue }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.firstSeen }}</dt>
+            <dt>
+              {{ F.firstSeen.en }}<span
+                v-if="F.firstSeen.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.firstSeen.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ formatClock(record.timing.firstSeen) }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.lastSeen }}</dt>
+            <dt>
+              {{ F.lastSeen.en }}<span
+                v-if="F.lastSeen.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.lastSeen.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ formatClock(record.timing.lastSeen) }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.portDuration }}</dt>
+            <dt>
+              {{ F.portDuration.en }}<span
+                v-if="F.portDuration.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.portDuration.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ formatDuration(now - record.timing.firstSeen) }}
             </dd>
@@ -280,17 +380,23 @@ async function onCopyCommand(): Promise<void> {
 
       <section class="pg-drawer__section">
         <h4 class="pg-drawer__heading">
-          {{ COPY.drawer.sections.runtime }}
+          <span class="pg-drawer__heading-en">{{ S.runtime.en }}</span>
+          <span class="pg-drawer__heading-cn">{{ S.runtime.cn }}</span>
         </h4>
         <dl class="pg-drawer__rows">
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.cpu }}</dt>
+            <dt>{{ F.cpu.en }}</dt>
             <dd class="pg-num">
               {{ record.runtime !== undefined ? `${record.runtime.cpuPercent.toFixed(1)}%` : COPY.table.emptyValue }}
             </dd>
           </div>
           <div class="pg-drawer__row">
-            <dt>{{ COPY.drawer.fields.memory }}</dt>
+            <dt>
+              {{ F.memory.en }}<span
+                v-if="F.memory.cn !== null"
+                class="pg-drawer__dt-cn"
+              >{{ F.memory.cn }}</span>
+            </dt>
             <dd class="pg-num">
               {{ record.runtime !== undefined ? `${record.runtime.memPercent.toFixed(1)}%` : COPY.table.emptyValue }}
             </dd>
@@ -359,12 +465,27 @@ async function onCopyCommand(): Promise<void> {
     background-color: var(--pg-surface);
   }
 
+  // §5.7 v1.2 分区标题双语内联：EN 主行 12px/600 muted + CN 辅助 11px/400 muted（无大写变换）
   &__heading {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
     margin: 0 0 8px;
-    // §5.7 中文分区标题 12px/600 muted（大写英文与正字距废除）
+    color: var(--pg-muted);
+  }
+
+  &__heading-en {
     color: var(--pg-muted);
     font-size: 12px;
     font-weight: 600;
+    line-height: 16px;
+  }
+
+  &__heading-cn {
+    color: var(--pg-muted);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 16px;
   }
 
   &__rows {
@@ -378,12 +499,14 @@ async function onCopyCommand(): Promise<void> {
     display: flex;
     gap: var(--pg-space-3);
 
+    // §5.7 v1.2：dt 定宽 156px（最长「Process Start 进程启动时间」≈151px 单行不换行），双语同行内联
     dt {
       flex: none;
-      width: 104px;
+      width: 156px;
       color: var(--pg-muted);
       font-size: 12px;
       line-height: 20px;
+      white-space: nowrap;
     }
 
     dd {
@@ -396,6 +519,14 @@ async function onCopyCommand(): Promise<void> {
       word-break: normal;
       overflow-wrap: anywhere;
     }
+  }
+
+  // CN 辅助行（§4.5 双语辅助行定档）：11px/400 muted
+  &__dt-cn {
+    margin-left: 4px;
+    color: var(--pg-muted);
+    font-size: 11px;
+    font-weight: 400;
   }
 
   &__mono {

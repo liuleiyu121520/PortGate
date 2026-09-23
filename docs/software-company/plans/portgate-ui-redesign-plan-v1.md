@@ -1,7 +1,7 @@
 # PortGate（端口门禁）UI 按 Apple 设计风格重构——实施方案
 
-- 方案版本：**v1.1**（v1.0 初稿经第 1 轮全新独立审查 ui-reviewer-r1 裁决 REVISE（0 blocker / 2 major / 5 minor / 未决假设 0 / 证据缺口 0）；v1.1 按 M-01/M-02/m-01~m-05 逐项修订，处置见 §14）
-- 状态：**PLAN_READY_FOR_REVIEW**（修订后仍为待审状态，交下一轮全新 reviewer）
+- 方案版本：**v1.3**（v1.0 → 第 1 轮 ui-reviewer-r1 REVISE → v1.1（M-01/M-02/m-01~05）→ 第 2 轮 ui-reviewer-r2 对 v1.1 **APPROVE**（0 blocker / 0 major / 3 minor，MINOR-UIR2-001~003）→ v1.2 用户反馈回流（双语标签，语义守卫登记 §11.5）→ 第 3 轮 ui-reviewer-r3 对 v1.2 **APPROVE**（0 blocker / 0 major / 4 minor，MINOR-UIR3-001~004，双语规范本体通过）→ **v1.3 主理人裁定勘误升版**：四项 minor 文本对齐 + 实施回写（v1.1 实现与两项视觉修复已由用户以提交 94af11d 入库，HEAD；裁定「实施已锁定基线优先」），纯文本、无设计变更；处置见 §14）
+- 状态：**APPROVED**（依据：第 3 轮 ui-reviewer-r3 对 v1.2 的 APPROVE 裁决；v1.3 为主理人裁定的纯文本勘误升版，不动批准范围——若主理人或后续 reviewer 认定构成范围变化，重新进入审查 loop）
 - 日期：2026-09-23
 - 作者：架构师 高见远（software-architect）
 - 路线：增量（视觉与交互层重构，需求已 REQUIREMENTS_READY）
@@ -51,7 +51,7 @@
 | 19 | Tab 选中交互蓝、无残影、user-select:none | §5.3 分段控件 + 断言 | B | 自动化 + 截图 |
 | 20 | Drawer 18px/hairline/scrim/分区完整 | §5.7 Drawer 重塑 | B/C | 截图 + 人工 |
 | 21 | 页眉唯一标题/拖拽/交通灯/图标化 | §7 hiddenInset 实现细节 | C | 人工 + 截图 |
-| 22 | 文案规范化全走查 | §8 文案常量表单一来源 + 断言 | A/B | 自动化 + 截图 |
+| 22 | 文案规范化全走查 | §8 双语文案常量表单一来源 + 断言（v1.2 双语口径：数据指标标签 EN 主行 + CN 辅助行；语义守卫登记 §11.5） | A/B | 自动化 + 截图 |
 | 23 | 统计条层级/琥珀唯一条件 | §5.2 统计条规格 | B | 截图 |
 | 24 | 基线功能无回退（AC-01~16） | §9 阶段 C 人工抽查 + 185 套件 | C | 自动化 + 人工 |
 | 25 | 双主题全界面截图集比对 | §10 截图验收方案（18+6=24 张：9 状态×双主题含确认/强制弹窗与设置 popover，另 2560 档 6 张；暗色先行） | C | 截图 |
@@ -108,10 +108,10 @@
 - `src/renderer/styles/variables.less`——重写：DESIGN.md 键名对齐的双主题 Less 变量全集 + 派生 token（radius/spacing/shadow/scrim/highlight/禁用）
 - `src/renderer/styles/themes.less`——重写：`:root` 与 `[data-theme='dark']` 双作用域 CSS custom properties
 - `src/renderer/styles/base.less`——重写：字体栈、13px 基准、`.pg-num`、全局 `:focus-visible` 焦点环、`.pg-press` 按压态、antd 焦点阴影中和与浮层 radius 兜底
-- `src/renderer/theme.ts`——重写：token 的 JS 镜像（供 ConfigProvider），`applyThemeToDocument` 原样保留
-- `src/renderer/App.vue`——页眉/统计条/分段 Tab/表格列与单元格/空态/横幅中性化/ConfigProvider token 块
+- `src/renderer/theme.ts`——重写：token 的 JS 镜像（供 ConfigProvider），`applyThemeToDocument` 原样保留；ThemeTokens 含 `on-primary` 字段（v1.3 实施回写）
+- `src/renderer/App.vue`——页眉/统计条（双语标签）/分段 Tab/表格列与单元格（含双语表头双行堆叠渲染）/空态/横幅中性化/ConfigProvider token 块
 - `src/renderer/components/SearchBar.vue`——pill 化、焦点环、键帽 5px（行为与 ⌘K 逻辑零改动）
-- `src/renderer/components/DetailDrawer.vue`——18px 面板/11px 内嵌块/中文标签/按钮语法/scrim/shadow/`→`
+- `src/renderer/components/DetailDrawer.vue`——18px 面板/11px 内嵌块/**双语分区标题与双语 dt 内联（dt 104→156px，宽度推算见 §5.7）**/按钮语法/scrim/shadow/`→`
 - `src/renderer/components/ThemeToggle.vue`——图标化 + tooltip「浅色/深色」（store 调用不变）
 - `src/renderer/components/HighlightText.vue`——仅样式（mark 底色 token 化、文字改 ink、圆角 5px）；分段渲染逻辑零改动
 - `src/renderer/composables/terminate.ts`——文案入表、`message.warning`→`message.error`（琥珀语义守卫）；终止流程逻辑零改动
@@ -123,7 +123,7 @@
 - `.gitignore`——追加 `screenshots/`（截图产物不入库；理由：验收走查读本地文件，仓库不留机器相关产物）
 
 **新增**
-- `src/renderer/copy.ts`——文案常量表 + 列定义 + 分隔符常量（§8，单一来源）
+- `src/renderer/copy.ts`——**双语文案常量表**（`BilingualLabel{en,cn|null}`，§8.2 定名表为断言基准）+ 列定义 + 分隔符常量（单一来源）
 - `src/renderer/components/SettingsMenu.vue`——页眉设置入口 popover（扫描周期三档，复用 settings:set）
 - `src/main/platform/window.ts`——`getWindowOptions()`（hiddenInset/交通灯定位；`process.platform` 合法区）
 - `src/main/dev/capture.ts`——PORTGATE_CAPTURE 截图脚本（§10）
@@ -166,6 +166,7 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 | `@light-primary-focus`（colors.primary-focus） | `--pg-focus` | `#0071e3`（需求固定） | 2px 焦点环 | 对 canvas 4.70（非文本 ≥3 ✓） |
 | （派生）`@light-danger-text` | `--pg-danger-text` | `#D70015` | 危险文字/描边（对齐 Apple 系统红暗色变体） | 对 canvas 5.38 / 对 surface 4.95 |
 | （派生）`@light-danger-fill` | `--pg-danger-fill` | `#D70015` | 确认弹窗红色主按钮填充 | 白字对填充 5.38 |
+| `@on-primary`（colors.on-primary，**主题无关档**，入 `:root`） | `--pg-on-primary` | `#ffffff` | accent/danger 填充上的按钮文字（v1.3 实施回写补记） | × danger-fill 5.38 / × accent-fill 5.57（≥4.5） |
 | （派生）`@light-warning` | `--pg-warning` | `#B45309` | 琥珀（仅 Exposed 文字/标签） | 对 canvas 5.02 / 对 surface 4.61 |
 | （派生）`@light-success` | `--pg-success` | `#1E8E5A` | 监控状态点（唯一含义） | 对 surface 3.80 / 对 canvas 4.14（非文本 ≥3 ✓） |
 | （派生）`@light-disabled` | `--pg-disabled` | `#7a7a7a`（DESIGN.md ink-muted-48） | 禁用控件文字 | 对 canvas 4.29（≥3 ✓） |
@@ -192,6 +193,7 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 | （派生）`@dark-primary-focus` | `--pg-focus` | `#409cff` | 焦点环（需求授权在 #2997ff 基础上定） | 对 #272729 5.27；与 #2997ff 元素可区分 |
 | （派生）`@dark-danger-text` | `--pg-danger-text` | `#FF6961` | 危险文字/描边（Apple 暗面无障碍红） | 对 #272729 5.29 / #2a2a2c 5.08 |
 | `@dark-danger-fill` | `--pg-danger-fill` | `#D70015`（与明色恒值） | 确认弹窗红主钮填充 | 白字 5.38 |
+| `@on-primary`（colors.on-primary，**主题无关档**，入 `:root`，双表同值仅登记一次作用域） | `--pg-on-primary` | `#ffffff` | 同明色表（v1.3 实施回写补记） | × danger-fill 5.38（§4.6） |
 | （派生）`@dark-warning` | `--pg-warning` | `#FF9F0A` | 琥珀（仅 Exposed） | 对 #272729 7.26 / #2a2a2c 6.97 |
 | （派生）`@dark-success` | `--pg-success` | `#30D158` | 监控状态点 | 对 #272729 7.38（≥3 ✓） |
 | （派生）`@dark-disabled` | `--pg-disabled` | `#808082` | 禁用文字 | 对 #272729 3.78（≥3 ✓） |
@@ -244,16 +246,17 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 | 字重梯 | 300/400/600/700，**禁 500** | 全 src 扫描（现仓已无 500，基线干净） |
 | 页面标题 | 17px/600/字距 **-0.2px**/行高 22px（Display 语法定档：需求授权「-0.2px 级」） | 600 + 负字距存在 |
 | 数据面基准 | **13px**/400，行高 20px（1.54，≥1.4 ✓）；强调值 600 | 12–14px 区间断言 |
-| 辅助档 | 12px（表头/次要说明/键帽）；抽屉正文 12px→13px 升档 | — |
-| 字距规则 | 仅 ≥17px 档允许负字距；12–14px 档零字距；**全仓禁止正字距与 `text-transform: uppercase`**（清除 `DetailDrawer.vue:329-334`、`App.vue:383`） | 扫描断言 |
+| 辅助档 | 12px（次要说明/键帽）；抽屉正文 12px→13px 升档 | — |
+| 双语辅助行（v1.2 新增） | **11px/400 `--pg-muted`**——用户反馈授权「字号小一点、颜色浅一些」（11–12px 区间取下限以拉开层级）；muted 为全 token 体系中最浅的 ≥4.5:1 达标文本档（#7a7a7a 禁用档对 canvas 仅 4.29:1，禁用于常规文本），故「更浅」由 11px+400 相对主行（12px/600 或 12px/400）的视觉重量差承担；不入 UI-AC-05「基准字号 12–14px」断言域（该断言对象为表格数据基准字号） | 双语行存在性 + token 引用断言（§8.5） |
+| 字距规则 | 仅 ≥17px 档允许负字距；12–14px 档零字距；**全仓禁止正字距；CSS 层禁止 `text-transform: uppercase`**（清除 `DetailDrawer.vue:329-334`、`App.vue:383`；v1.2 修订：大写由 copy.ts 数据携带，合法域 = 表头/抽屉分区 EN 主行，§8/§4.7） | 扫描断言 |
 | 数字 | `.pg-num` 工具类 = `font-variant-numeric: tabular-nums`；应用于端口/PID/时长/统计数字/抽屉数值 | 类存在 + 应用点断言（UI-AC-06） |
-| 表头 | 中文、12px/600、muted、无大写变换（§4.4「表头中文常规体」落档） | 文案断言（UI-AC-22） |
+| 表头（v1.2 双语） | 双行堆叠：EN 主行 12px/600 大写 muted（PORT…，大写为数据形态）+ CN 辅助行 11px/400 muted（端口…）；`user-select: none` 维持 | 文案断言（UI-AC-22，§11.5 口径） |
 
 ### 4.6 对比度断言全集（UI-AC-09 自动化的完整对清单）
 
 `tests/unit/design-tokens.test.ts` 内实现 WCAG 相对亮度公式（sRGB 线性化 + L=0.2126R+0.7152G+0.0722B），断言：
 
-- **文本 ≥4.5:1**（文字档 token × 所属表面全集）：明 {ink, muted, accent, danger-text, warning} × {canvas, surface}；暗 {text, muted, accent, danger-text, warning} × {canvas(#272729), surface(#2a2a2c)}；白字 × {accent-fill, danger-fill}（双主题）。其中 **danger-text×{canvas, surface} 双主题四对即危险 hover 升格素面态的完整覆盖**（hover 时行底为 surface、键盘焦点不悬停时为 canvas；v1.1 按 M-01 补注，无 tint 叠加对存在，见 §4.1 派生裁定 7）。
+- **文本 ≥4.5:1**（文字档 token × 所属表面全集）：明 {ink, muted, accent, danger-text, warning} × {canvas, surface}；暗 {text, muted, accent, danger-text, warning} × {canvas(#272729), surface(#2a2a2c)}；白字 × {accent-fill, danger-fill}（双主题）→ **v1.3 改记为 on-primary（#ffffff，主题无关档）× {accent-fill, danger-fill}（双主题；on-primary×danger-fill=5.38 ≥4.5）**。其中 **danger-text×{canvas, surface} 双主题四对即危险 hover 升格素面态的完整覆盖**（hover 时行底为 surface、键盘焦点不悬停时为 canvas；v1.1 按 M-01 补注，无 tint 叠加对存在，见 §4.1 派生裁定 7）。
 - **禁用文字 ≥3:1**：明 #7a7a7a/canvas、暗 #808082/#272729；**保护原因文案 ≥4.5:1**：走 muted 档（已含于上）。
 - **非文本 ≥3:1**：success 点 × {surface, canvas}（双主题）、warning × 全表面、焦点环 × 全表面。
 - **hairline ≥1.2:1（自设可辨下限）**：明 #e0e0e0 × {canvas, surface}；暗 rgba(255,255,255,0.14) 按混合公式计算后 × {#252527, #272729, #2a2a2c}。
@@ -267,11 +270,11 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 | 扫描项 | 规则（`design-tokens.test.ts` / `copy-contract.test.ts`） |
 |---|---|
 | 旧色值 | `src/` 全树大小写不敏感扫描，以下 16 值零命中：`#F6F7F9 #E7E9ED #1D2129 #667085 #98A2B3 #4F6EF7 #22A06B #F59E0B #E5484D #17191D #1E2126 #24282E #30343B #A7ADB7 #6D85FF #F2F4F7` |
-| 三处同源 | `variables.less` / `themes.less` / `theme.ts` 对每个语义 token 的值恒等（解析比较） |
+| 三处同源 | `variables.less` / `themes.less` / `theme.ts` 对每个语义 token 的值恒等（解析比较）；on-primary 入 `:root` 作用域、theme.ts ThemeTokens 含该字段（v1.3 实施回写，§9 阶段 A 影响文件） |
 | 圆角 | 源内所有 `border-radius`/`borderRadius` 字面量 ∈ {0, 5, 8, 11, 18, 9999, 50%→禁止}；组件一律引用 `var(--pg-radius-*)` 或 antd token |
 | 字重 | 全 src `font-weight` ∈ {300,400,600,700}，`500` 零命中 |
 | 阴影 | `box-shadow` 字面量仅允许：`variables.less`（token 定义）与 base.less 的 `box-shadow: none` 中和块；组件层仅允许 `box-shadow: var(--pg-shadow-overlay)` |
-| 字体/字距 | 栈含 `system-ui`/`-apple-system`；`letter-spacing` 仅允许 0 或负值；`text-transform: uppercase` 零命中 |
+| 字体/字距 | 栈含 `system-ui`/`-apple-system`；`letter-spacing` 仅允许 0 或负值；`text-transform: uppercase` 零命中（CSS 层；数据级大写合法域见 §4.5/§8——copy.ts 表头/分区 EN 主行） |
 | tabular | `.pg-num{...tabular-nums...}` 存在且 App/抽屉数字单元格引用 |
 
 ### 4.8 antd ConfigProvider token 同步策略（R-UI-1 首道手段）
@@ -303,14 +306,14 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 - macOS hiddenInset：页眉即拖拽区 + 标题层（详见 §7）；`padding-left: 80px` 避让交通灯（x=16 + 灯组宽 ~52px）。
 - 标题：`PortGate · 端口门禁`（COPY 保留；17px/600/-0.2px）；右侧依次：监控状态（8px 圆点 + 「监控中」/「扫描失败」12px muted，错误态点与文字用 danger-text）、主题图标钮、设置图标钮。
 - 主题图标钮（28×28 pill 圆、hairline、ink 图标，sun/moon SVG 自绘）：tooltip 显示当前主题名「浅色/深色」（D-UI-07；主题名不常驻）。原 a-switch + 英文名废除（`ThemeToggle.vue` 重写）。
-- 设置图标钮：popover（11px 档、elevated 面、hairline）内容 = 扫描周期三档分段（「1 秒 / 2 秒 / 5 秒」，调既有 `settings:set` scanInterval）+ 提示行。**范围解释**：D-UI-07/UI-AC-21 明列「设置入口」，而现仓 scanInterval 无任何 UI（§2.3 证据）；本方案以最小化方式将其既有能力界面化，无新设置项、无 IPC 变更、无新 channel（登记供 reviewer 裁定，§11.4）。
+- 设置图标钮：popover（11px 档、elevated 面、hairline）内容 = 「Scan Interval 扫描周期」双语标签（§8.2）+ 三档分段「1 秒 / 2 秒 / 5 秒」（值层维持既有中文形态、不适用双语——v1.3 按 MINOR-UIR3-004 裁定，v1.2 的 1s/2s/5s 为未声明漂移不实施；§8.1；调既有 `settings:set` scanInterval）+ 提示行。**范围解释**：D-UI-07/UI-AC-21 明列「设置入口」，而现仓 scanInterval 无任何 UI（§2.3 证据）；本方案以最小化方式将其既有能力界面化，无新设置项、无 IPC 变更、无新 channel（登记供 reviewer 裁定，§11.4）。
 - 拖拽/交互冲突规避：`.pg-header { -webkit-app-region: drag }`；页眉内全部按钮/浮层锚点 `no-drag`；状态点为纯展示随拖拽区。页眉内 `user-select: none`。
 - Win/Linux：TITLEBAR_MODE 语义决定页眉无重复标题（§7.4）；R-01 横幅改中性 notice（surface 底 + hairline + ink 文本），废除 a-alert 的 warning 琥珀。
 
 ### 5.2 统计条（40px 条带）
 
-- 形态：`端口 46 · TCP 38 · UDP 8 · 对外 5`——中文标签 12px muted + 数字 13px/600 ink `.pg-num`，`·` 分隔（COPY 统一给出）。
-- 琥珀唯一条件：仅 `stats.exposed > 0` 时「对外」数字用 `--pg-warning`，否则中性（现 `App.vue:190-199` 恒琥珀废除）。TCP/UDP/端口恒中性。
+- 形态（v1.2 双语）：`Ports 端口数 46 · TCP 38 · UDP 8 · Exposed 对外 5`——EN 主标签 12px muted + CN 辅助 11px/400 muted（同 token，§4.5 双语辅助行定档；TCP/UDP 豁免无 CN，§8.1）+ 数字 13px/600 ink `.pg-num`，`·` 分隔（COPY 统一给出）。
+- 琥珀唯一条件：仅 `stats.exposed > 0` 时「Exposed 对外」的数字用 `--pg-warning`，否则中性（现 `App.vue:190-199` 恒琥珀废除）。TCP/UDP/Ports 恒中性。
 - 面层：`--pg-surface` 条带（全幅 0 圆角），上下留白 12px（space-3）。
 
 ### 5.3 当前/历史 Tab（Apple 化分段控件）
@@ -321,14 +324,15 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 
 ### 5.4 主表格（antd Table 保留，token + 定向覆盖）
 
-- **列定义**（入 `copy.ts` 为数据常量，断言载体）：`端口 120px｜进程 min 220px 弹性｜应用 140px｜地址 弹性｜运行时长 96px｜操作 88px`。需求 §6-3 六列中文表头：端口/进程/应用/地址/运行时长/操作。PROJECT 列删除（§6）；APP 列保留。960px 窄窗口下两弹性列收缩仍无横滚（scroll.x 不设）。
+- **列定义**（入 `copy.ts` 为数据常量，断言载体；v1.2 起 label 为 `BilingualLabel{en,cn}` 双语对，§8.2）：`PORT 端口 140px｜PROCESS 进程 min 220px 弹性｜APP 应用 140px｜ADDRESS 地址 弹性｜UPTIME 运行时长 96px｜ACTION 操作 88px`。**端口列宽 v1.3 实施回写：120→140px**——5 位数端口 + 协议 + 「Exposed 对外」标签单行容纳（已锁定于 copy.ts/copy-contract 断言与提交 94af11d 实现事实）。PROJECT 列删除（§6）；APP 列保留。960px 窄窗口下两弹性列收缩仍无横滚（scroll.x 不设）。
+- **表头双语双行堆叠（v1.2）**：EN 主行 12px/600 大写 muted 在上 + CN 辅助行 11px/400 muted 在下（经 antd Table headerCell 模板渲染，EN 文本出自 COPY、大写为数据形态，无 CSS transform）。**对密度规格的影响核定**：表头带高由单行约 36–40px 增至约 48px（8px padding + 16px EN 行 + 2px 间距 + 14px CN 行 + 8px padding）；UI-AC-10 的 44–60px 度量对象为**数据行**，数据行规格（padding 10px + 20px 行内容 + 1px 分隔）与可视行数 ≥2× 判据不变；CN 辅助行（最长「运行时长」4 字 ≈44px）窄于全部列宽，**不撑宽任何列**，UI-AC-15 列宽断言不受影响。需求 §6-3「表头统一中文」由用户反馈覆盖为双语（§11.5）。历史表头同步：PORT 端口 / PROCESS 进程 / INTERVAL 时间区间 / DURATION 时长。
 - **行密度**：cell padding `10px 12px`（space-3 横向）+ 13px/20px 单行 + 1px 分隔 = 行高 ~47–48px，落 44–60 区间（目标 48 ✓）；可视行数对 V1（~128px 行高）≥2×（UI-AC-10）。
 - **单行化**：全部单元格 `white-space: nowrap; overflow: hidden; text-overflow: ellipsis`；废除任何 word-break（`DetailDrawer.vue:361` 的 break-all 一并废除，地址完整值由 tooltip 与抽屉承担）。
 - **端口单元格**：`{port}` 13px/600 `.pg-num`（HighlightText，field `port`）+ `TCP/UDP` 12px muted 纯文本（无配色无徽标）+ Exposed>0 时「对外」11px warning 短标签（唯一语义色）。三要素单行（UI-AC-11）。
 - **进程单元格**：`{process.name}`（HighlightText，`processName`）+ 次要文本 `PID {pid}`（pid 数字走 HighlightText，field `pid`）+ 有 project 时 `· {project.name}`（HighlightText，`projectName`）——次要文本 12px muted，与主文本同行省略。中点用法符合需求 §6-7（并列同类短元数据）。
 - **应用单元格**：`{application.name}`（HighlightText）；无则 muted「—」占位（保留；UI-AC-13 的「无空占位」仅约束 project）。
 - **地址单元格**：`{localAddress}:{localPort}`（HighlightText，`localAddress`）+ state 存在时次要文本 `{state}`（**无 `·` 前缀**，修正 `App.vue:275-278`）；a-tooltip 显示完整地址（remote 存在时 `local → remote`，`→` 常量来自 COPY）；UI-AC-12 的 word-break/ellipsis 样式断言落此。
-- **运行时长单元格**：`formatDuration` 紧凑式 `.pg-num`（§8.3 格式规则）。
+- **运行时长单元格**：`formatDuration` 紧凑式 `.pg-num`（§8.4 格式规则）。
 - **操作单元格**：三级语法按钮（§5.5）。
 - **行分隔**：tbody `td { border-bottom: 1px solid var(--pg-hairline) }`；斑马纹废除（行底透明）、表格外框卡片废除（`.ant-table`/容器 bg transparent、去圆角壳与描边）；表头底部同 hairline（UI-AC-14）。
 - **hover**：行 `--pg-surface`（tile 微阶语法）；点击行开抽屉行为不变（customRow onClick 保留）。
@@ -351,8 +355,8 @@ Less 源变量（`variables.less`，供构建期注入）→ CSS custom properti
 ### 5.7 Drawer 重塑（480px 宽保持）
 
 - 面板：左缘 `--pg-radius-lg`（18px）圆角（右侧贴窗缘）、左缘 hairline、面板 `--pg-canvas` 底、`--pg-shadow-overlay`（唯一功能阴影使用点之一）、mask 换 `--pg-scrim`（antd drawer mask 覆盖）。UI-AC-20。
-- 分区：**应用与项目 / 网络 / 进程 / 时间 / 运行时**（五区，与现状 IA 对齐、改动最小；首区由「Application / Project」中文化，v1.1 按 m-04 补记落位）——中文分区标题 12px/600 muted，**废除大写英文**；内嵌块 11px 档 + hairline + `--pg-surface` 底。首区两行：应用（`application.name`，HighlightText `applicationName`，无则「—」）、项目（`project.name`，HighlightText `projectName`，无则「—」）。
-- 行：dt 12px muted 固定 104px（标签中文化：端口/地址/协议/状态/暴露/PID/PPID/用户/可执行文件/命令/工作目录/启动时刻/运行时长/首次出现/最近出现/端口存续/CPU/内存——技术值 TCP/UDP/LISTEN 等英文原样）；dd 13px ink；等宽字体仅路径/命令保留。
+- 分区标题双语内联（v1.2，§8.2）：`APPLICATION / PROJECT 应用与项目`、`NETWORK 网络`、`PROCESS 进程`、`TIME 时间`、`RUNTIME 运行时`——EN 主行 12px/600 大写 muted + CN 辅助 11px/400 muted 同行内联。**首区一致性裁定**：按同一双语规则处理（不保留 v1.1 m-04 的纯中文特例）——五区同语法、无特例维护与走查歧义，且用户截图所示旧版首区本为「APPLICATION/PROJECT」英文形态，双语化后信息不回退。内嵌块 11px 档 + hairline + `--pg-surface` 底。首区两行（dt 双语：Application 应用 / Project 项目，§8.2）：应用名（`application.name`，HighlightText `applicationName`，无则「—」）、项目名（`project.name`，HighlightText `projectName`，无则「—」）。
+- 行：dt 固定 **156px**（v1.2 由 104px 放宽，承接双语内联），标签双语**同行内联**「Port 端口」形态（EN 12px/400 muted 原样大小写 + CN 11px/400 muted，定名以 §8.2 表为准；CPU 豁免无 CN）——**内联 over 堆叠的理由**：① 任意 dt 宽度下堆叠都使 dt 行高翻倍（两行 ≈32px），破坏 20px 行节奏与十项信息一屏性；② 内联保持 dt/dd 同基线单行，值列（dd 13px ink）对齐与行高不受破坏；③ dt 加宽后最长对「Process Start 进程启动时间」（EN 13 字符 ≈81px + CN 6 字 ≈66px + 间距）≈151px < 156px，全部 18 对标签单行不换行；值列可用宽相应收窄约 52px（长值省略/换行规则不变，无 AC 依赖值列宽）。dd 13px ink；等宽字体仅路径/命令保留。
 - 暴露完整定义保留：「Exposed 对外监听 / Local 仅本机」+「对外监听 ≠ 公网可达」提示（基线语义不变，需求 §6-5）。
 - 底部按钮：打开项目目录 / 复制命令（8px 档次级）+ 结束进程（中性 ghost，hover 红升格；保护进程禁用 + 行内常显原因）——与行内三级语法同款。`record:reveal`/clipboard 逻辑零改动。
 - 十项信息（AC-04）与高亮（HighlightText 各字段）完整保留；remote 存在时 Network 区地址以 `→` 连接。
@@ -400,31 +404,50 @@ Modal：18px/elevated/shadow/scrim、ok=pill 红、cancel=8px 次级；SettingsM
 
 ---
 
-## 8. 文案常量表单一来源（D-UI-06/UI-AC-22）
+## 8. 文案常量表单一来源（D-UI-06/UI-AC-22；v1.2 双语标注规则）
 
-### 8.1 单一来源与规则
+> **v1.2 语义守卫登记**：本节由用户反馈回流定向修订（用户原话与授权见 §11.5），覆盖需求记录 §6-3（表头纯中文）/§6-4（统计中文标签形态）与 UI-AC-22「全大写英文表头消失」口径；其余格式规则（2m/…/→/常量表集中）不变。
 
-- 新增 `src/renderer/copy.ts`：`COPY`（全部界面字符串，含嵌套分组 header/stats/tabs/table/actions/drawer/empty/tooltips/settings/banner）、`COLUMN_DEFS`（当前表/历史表列定义：中文 label + key + width）、`SEP`（`DOT: '·'`、`ARROW: '→'`、`ELLIPSIS: '…'`）。组件模板一律引用常量，禁止散落字面量（断言 §8.4）。
-- **中文标签**：搜索、结束进程、强制结束、复制命令、打开项目目录、当前、历史、设置、监控中、扫描失败、端口、进程、应用、项目、地址、运行时长、操作、浅色、深色、系统进程，受保护、没有匹配的结果、暂无监听端口、暂无历史会话、对外、仅本机、应用与项目、网络、时间、运行时、用户、可执行文件、工作目录、启动时刻、首次出现、最近出现、端口存续、1 秒/2 秒/5 秒 等（全量落表；「应用」「项目」为 §5.7 首区行标签，v1.1 按 m-04 补入）。
-- **技术标识符英文原样、不改大小写**：TCP、UDP、PID、PPID、LISTEN、ESTABLISHED、⌘K、Docker、macOS、SIGTERM、SIGKILL、Exposed、Local、USER/SYSTEM/SYSTEM_CRITICAL/UNKNOWN（保护级值）。
-- **品牌名豁免**：`PortGate · 端口门禁` 保留（产品名，非并列元数据）。
+### 8.1 单一来源与双语标注规则
+
+- `src/renderer/copy.ts` 数据结构（v1.2 扩展）：`BilingualLabel { en: string; cn: string | null }`（`cn: null` = 豁免中文）；`COPY`（纯中文保留域字符串，含嵌套分组 actions/drawer-hints/empty/tooltips/banner）、`TABLE_COLUMNS` / `HISTORY_COLUMNS`（label 双语 + key + width）、`DRAWER_SECTIONS` / `DRAWER_FIELDS`（双语）、`STATS_LABELS`（双语）、`SETTINGS`（双语）、`SEP`（`DOT: '·'`、`ARROW: '→'`、`ELLIPSIS: '…'`）。组件模板一律引用常量，禁止散落字面量（断言 §8.5）。
+- **双语规则（适用域 = 数据指标类标签）**：英文为主行（技术惯例；形态不改写——表头/分区标题大写、dt 字段标签原样大小写），中文辅助释义以 **11px/400 `--pg-muted`** 伴随显示（字号更小、视觉更浅，token 定档与「更浅」的实现口径见 §4.5 双语辅助行）；展现形态：表头两行堆叠（§5.4）、抽屉分区标题与 dt 同行内联（§5.7）、统计条与设置标签内联（§5.2/§5.1）。该规则将用户已认可的值层双语形态（「Local · 仅本机」，需求 §6-5）对齐扩展到标签层。
+- **豁免域（`cn: null` 或维持既有形态）**：
+  1. 通用技术缩写豁免中文：**TCP、UDP**（传输层协议 RFC 793/768 术语，两缩写为全行业通用、无理解增益，中文全称过长破坏统计条密度）、**CPU**（同理由）；对照之下 **Exposed 不豁免**（非通用缩写且安全含义需中文锚定，用户截图已认可「对外」）、**PID/PPID 不豁免**（「进程 ID / 父进程」有实际理解增益）——豁免判据 = 「缩写是否已脱离英文原词被通用理解」。
+  2. 值层维持既有中文形态（不适用双语）：扫描周期三档「1 秒 / 2 秒 / 5 秒」（v1.3 按 MINOR-UIR3-004 裁定，v1.2 的 1s/2s/5s 为未声明漂移不实施；copy-contract 断言与 v1.1 批准口径锁定）、TCP/UDP/LISTEN/ESTABLISHED 等数据值、「Exposed 对外监听 / Local 仅本机」。
+  3. **纯中文保留域（控件与状态文案，需求 §6-1 不变）**：按钮（结束进程/强制结束/复制命令/打开项目目录/取消/清空搜索）、Tab（当前/历史）、状态（监控中/扫描失败）、空态三句、tooltip（浅色/深色、系统进程，受保护）、确认弹窗与拒绝文案、搜索 placeholder、品牌名 `PortGate · 端口门禁`。理由：用户反馈明确限定「这些指标」——即数据指标类标签；控件/状态文案的中文主语境不变。
+- **技术标识符英文原样、不改大小写**（数据值域）：TCP、UDP、PID、PPID、LISTEN、ESTABLISHED、⌘K、Docker、macOS、SIGTERM、SIGKILL、Exposed、Local、USER/SYSTEM/SYSTEM_CRITICAL/UNKNOWN（保护级值）。
 - **改写边界**：格式规则约束 UI 自产文案；数据原值（命令行、路径、容器映射串）不作字符替换。
 
-### 8.2 统计与中点规则
+### 8.2 双语定名对照总表（copy.ts 断言基准）
 
-- 统计形态 `端口 {n} · TCP {n} · UDP {n} · 对外 {n}`（COPY 顺序化模板）；`·` 仅用于并列同类短元数据（统计项、进程单元格的 `PID x · 项目名`、抽屉时间区间的 `时刻 · 时长`）；键值对一律标签式（`PID 22415`、裸 `LISTEN`），禁止 `·` 连接异质维度（修正 `App.vue:245/275-278`）。
+**表头（当前表 6；PROJECT 列已按 D-UI-04 并入进程列，无独立表头）**：PORT 端口 ｜ PROCESS 进程 ｜ APP 应用 ｜ ADDRESS 地址 ｜ UPTIME 运行时长 ｜ ACTION 操作
+**历史表头（4）**：PORT 端口 ｜ PROCESS 进程 ｜ INTERVAL 时间区间 ｜ DURATION 时长
+**统计（4，2 豁免）**：Ports 端口数 ｜ TCP（豁免）｜ UDP（豁免）｜ Exposed 对外
+**抽屉五区**：APPLICATION / PROJECT 应用与项目 ｜ NETWORK 网络 ｜ PROCESS 进程 ｜ TIME 时间 ｜ RUNTIME 运行时
+**抽屉字段（20，1 豁免；v1.3 MINOR-UIR3-002 补首区两标签）**：Application 应用 ｜ Project 项目 ｜ Port 端口 ｜ Address 地址 ｜ Protocol 协议 ｜ State 状态 ｜ Exposure 暴露 ｜ PID 进程 ID ｜ PPID 父进程 ｜ User 用户 ｜ Executable 可执行文件 ｜ Command 命令 ｜ Working Dir 工作目录 ｜ Process Start 进程启动时间 ｜ Uptime 已运行 ｜ CPU（豁免）｜ Memory 内存 ｜ First Seen 首次发现 ｜ Last Seen 最近发现 ｜ Port Duration 占用时长
+**设置**：Scan Interval 扫描周期（选项「1 秒 / 2 秒 / 5 秒」为纯中文保留域，不设双语——v1.3 MINOR-UIR3-004）
 
-### 8.3 格式化规则（`utils/format.ts` 变更 + 断言）
+- **术语核对结论**（以需求 §5 Drawer 分区与 §6 字段语义为准）：需求仅固定英文名与语义（First Seen / Last Seen ≠ Last Active、Uptime / Port Duration、十项信息），未固定任何中文名；上表中文名**逐字采纳用户反馈草案**（进程启动时间/已运行/首次发现/最近发现/占用时长），遵守「Last Seen ≠ Last Active」（「最近发现」不涉 Last Active 语义，无冲突）。v1.1 旧名（启动时刻/端口存续/首次出现/最近出现）随之废弃。
+- **语境形态注记**：表头 UPTIME=「运行时长」（名词短语）与抽屉 Uptime=「已运行」（短谓语）为同概念在两种排版语境下的形态变体——EN 主行本身亦然（UPTIME / Uptime），不构成双译名冲突；Port Duration=「占用时长」与两者语义可区分（端口维度 vs 进程维度）。
+
+### 8.3 统计与中点规则
+
+- 统计形态 `Ports 端口数 {n} · TCP {n} · UDP {n} · Exposed 对外 {n}`（COPY 顺序化模板，双语标签见 §5.2）；`·` 仅用于并列同类短元数据（统计项、进程单元格的 `PID x · 项目名`、抽屉时间区间的 `时刻 · 时长`）；键值对一律标签式（`PID 22415`、裸 `LISTEN`），禁止 `·` 连接异质维度（修正 `App.vue:245/275-278`）。
+
+### 8.4 格式化规则（`utils/format.ts` 变更 + 断言）
 
 - 时长：秒位为零则省略——`45s`、`60s→1m`、`150s→2m30s`、`3600s→1h`、`4980s→1h23m`（现 `1m0s`/`1h0m` 形态消失；`tests/unit/format-duration.test.ts` 全分支断言）。
 - 省略号 `…`、箭头 `→`、区间连字符 `17:30 - 18:42` 保持；中文语境中文标点。
 
-### 8.4 自动化断言（`copy-contract.test.ts`）
+### 8.5 自动化断言（`copy-contract.test.ts`，v1.2 扩展）
 
-1. COPY 键位完整性：表头六项、按钮、状态、空态、tooltip、统计模板、设置项逐键存在且等于规定值（对上表抽样全查）。
-2. `src/renderer/**/*.vue` **模板块**（`<template>` 截取）扫描零命中：`->`、`...`、`2m0s` 正则 `\d+m0s`、全大写英文表头词（PORT/PROCESS/APP/ADDRESS/UPTIME/ACTION/PROJECT）、英文主题名（Cloud Slate/Midnight Slate）、`（\d+）` 式 Tab 计数括号。
-3. 时长负向：`formatDuration(120_000) === '2m'` 等（§8.3）。
-4. 搜索 placeholder 与高亮不受文案规则影响（检索对象为数据值本身，HighlightText 行为不变——需求 §6 尾注，回归由既有套件承担）。
+1. **双语对完整性（阶段 A 激活）**：§8.2 **六组**逐对恒等断言——表头 6、历史表头 4、统计 4、抽屉五区 5、抽屉字段 **20**、设置 1 的 `en`/`cn` 精确匹配定名表（v1.3 MINOR-UIR3-002：抽屉字段组补 Application/Project、设置组纳入断言）；豁免白名单恒等（**仅 TCP/UDP/CPU 允许 `cn: null`**；扫描周期三档「1 秒 / 2 秒 / 5 秒」为纯中文保留域字符串、不经 BilingualLabel——v1.3 MINOR-UIR3-004）。
+2. **EN 形态断言（阶段 A 激活）**：表头与抽屉分区的 `en === en.toUpperCase()`；dt 字段标签保持原样大小写（`Port` 非 `PORT`）。
+3. **模板块扫描（阶段 B 激活，随组件迁移）**：`src/renderer/**/*.vue` 模板块零命中——`->`、`...`、`2m0s` 正则 `\d+m0s`、大写表头词字面量（PORT/PROCESS/…仅可出自 copy.ts，模板经 `{{ label.en }}` 渲染）、英文主题名（Cloud Slate/Midnight Slate）、`（\d+）` 式 Tab 计数括号。
+4. **CSS 大写禁令（阶段 A 激活）**：`text-transform: uppercase` 全 src 零命中（大写由 copy.ts 数据携带，§4.5/§4.7）。
+5. **时长负向**：`formatDuration(120_000) === '2m'` 等（§8.4）。
+6. **搜索 placeholder 与高亮不受文案规则影响**（检索对象为数据值本身，HighlightText 行为不变——需求 §6 尾注，回归由既有套件承担）。
 
 ---
 
@@ -434,7 +457,7 @@ Modal：18px/elevated/shadow/scrim、ok=pill 红、cancel=8px 次级；SettingsM
 
 ### 阶段 A：设计 token 体系 + 文案基座（中间态 = 新色板 + 旧布局，可运行）
 
-- 影响文件：`styles/variables.less`、`styles/themes.less`、`styles/base.less`、`theme.ts`、`copy.ts`（新）、`utils/format.ts`、`HighlightText.vue`（仅样式）、`App.vue`（仅 ConfigProvider token 块 + 全组件 CSS 变量引用改名 `--pg-background/surface/border/text/secondary/muted/accent/success/warning/danger` → §4.1 新名；不改任何布局/结构）、`SearchBar.vue`/`DetailDrawer.vue`/`ThemeToggle.vue`（仅变量引用改名）、`composables/terminate.ts`（仅文案入表，warning→error 留待阶段 B）；新增 `tests/unit/{design-tokens,copy-contract,format-duration}.test.ts`（copy-contract 本阶段仅含 COPY 完整性/分隔符/格式断言，模板块扫描随阶段 B 激活，§4.7 分级）。
+- 影响文件：`styles/variables.less`、`styles/themes.less`、`styles/base.less`、`theme.ts`（**ThemeTokens 补 `on-primary` 字段**，v1.3 实施回写）、`copy.ts`（新，**双语结构 `BilingualLabel{en,cn|null}` + §8.2 六组定名表**，v1.2/v1.3）、`utils/format.ts`、`HighlightText.vue`（仅样式）、`App.vue`（仅 ConfigProvider token 块 + 全组件 CSS 变量引用改名 `--pg-background/surface/border/text/secondary/muted/accent/success/warning/danger` → §4.1 新名；不改任何布局/结构）、`SearchBar.vue`/`DetailDrawer.vue`/`ThemeToggle.vue`（仅变量引用改名）、`composables/terminate.ts`（仅文案入表，warning→error 留待阶段 B）；新增 `tests/unit/{design-tokens,copy-contract,format-duration}.test.ts`（copy-contract 本阶段仅含双语对完整性/EN 形态/CSS 大写禁令/分隔符/格式断言（§8.5-1/2/4/5），模板块扫描随阶段 B 激活（§8.5-3，§4.7 分级））。
 - 实现步骤（依赖序）：① variables.less 双主题全集 + 派生 token → ② themes.less 双作用域 → ③ theme.ts 镜像 + App.vue ConfigProvider 映射表（§4.8）→ ④ base.less（栈/13px/`.pg-num`/焦点环/按压态/antd 阴影中和）→ ⑤ 全组件变量改名（不改布局）→ ⑥ copy.ts + format.ts + 组件文案切换 → ⑦ 三个新测试文件。
 - 测试/验证：§4.6 对比度全集、§4.7 阶段 A 分级扫描（token 三处同源/旧色值 `src/renderer` 范围/字重/阴影/字体栈）、COPY 完整性与 format 断言全绿；**既有 185 全绿**（旧断言零依赖旧色板，§2.3 证据）；dev 冒烟：双主题切换生效、antd 组件按新 token 渲染（D-UI-B 判据，§13）。
 - UI-AC：01/02/04/05/07/09 的自动化部分、22 的自动化部分。
@@ -442,10 +465,10 @@ Modal：18px/elevated/shadow/scrim、ok=pill 红、cancel=8px 次级；SettingsM
 
 ### 阶段 B：布局与组件重塑（renderer 全部形态变更）
 
-- 影响文件：`App.vue`（页眉重构含 showHeaderTitle 占位、统计条、分段 Tab、表格列/单元格/空态、横幅中性化、drag 类挂载）、`SearchBar.vue`（pill/焦点环）、`DetailDrawer.vue`（§5.7 全项）、`ThemeToggle.vue`（图标化+tooltip）、`SettingsMenu.vue`（新）、`stores/settings.ts`（setScanInterval action）、`composables/terminate.ts`（warning→error + 文案表化）；新增 `tests/unit/app-shell.test.ts`。
+- 影响文件：`App.vue`（页眉重构含 showHeaderTitle 占位、统计条双语、分段 Tab、表格列/单元格/空态、**表头双语双行堆叠渲染**、横幅中性化、drag 类挂载）、`SearchBar.vue`（pill/焦点环）、`DetailDrawer.vue`（§5.7 全项，含**分区标题与 dt 双语内联**、dt 156px）、`ThemeToggle.vue`（图标化+tooltip）、`SettingsMenu.vue`（新，双语标签）、`stores/settings.ts`（setScanInterval action）、`composables/terminate.ts`（warning→error + 文案表化）；新增 `tests/unit/app-shell.test.ts`（另激活 copy-contract 模板块扫描 §8.5-3）。
 - 前置条件：阶段 A 已合入（token/文案可用）。
 - 实现步骤（依赖序）：① copy.ts 列定义接入 App（列结构变更 + PROJECT 并入，§6）→ ② 表格密度/单行化/hairline/hover/空态 → ③ 分段 Tab → ④ 页眉结构（状态点/图标钮/设置入口/drag/no-drag 类）→ ⑤ 搜索框 pill → ⑥ Drawer → ⑦ 弹窗/浮层 radius 与 scrim/shadow 覆盖 → ⑧ app-shell 测试。
-- 测试/验证：app-shell 断言（列头中文六项、无 PROJECT 列、进程单元格 projectName 命中出 `<mark>`、无 project 不渲染占位、行高常量推算 44–60、user-select 断言、点击区 28 常量）全绿；**copy-contract 扩展模板块扫描 + design-tokens 扩展组件级扫描（圆角字面量/字距符号/uppercase/tabular 应用，§4.7 分级）全绿**；**185 + 阶段 A 断言复跑全绿**；dev 真机走查：搜索/⌘K/终止确认/保护禁用/历史四流程无功能回归。
+- 测试/验证：app-shell 断言（列头双语六项（EN 主行大写 + CN 辅助行）、无 PROJECT 列、进程单元格 projectName 命中出 `<mark>`、无 project 不渲染占位、行高常量推算 44–60、user-select 断言、点击区 28 常量）全绿；**copy-contract 扩展模板块扫描（§8.5-3）+ design-tokens 扩展组件级扫描（圆角字面量/字距符号/uppercase/tabular 应用，§4.7 分级）全绿**；**185 + 阶段 A 断言复跑全绿**；dev 真机走查：搜索/⌘K/终止确认/保护禁用/历史四流程无功能回归。
 - UI-AC：03/06/10（自动化口径 = 行高常量推算 + 单行样式断言；「可视行数 ≥2×」以截图复核）、11/12（样式断言部分）/13/14（源码口径）/16/17/18（自动化部分）/19/23。
 - 回滚：revert 本阶段提交 → 退回阶段 A 中间态（token 已就位、布局复原）。
 
@@ -466,17 +489,19 @@ Modal：18px/elevated/shadow/scrim、ok=pill 红、cancel=8px 次级；SettingsM
 
 | # | 状态 | 构造方式 | 主要验收锚点 |
 |---|---|---|---|
-| 01/02 | 列表 | 启动即拍（真机端口） | 行单行/hairline/无红元素/无斑马纹/列宽 |
+| 01/02 | 列表 | 启动即拍（真机端口） | 双语表头堆叠/行单行/hairline/无红元素/无斑马纹/列宽 |
 | 03/04 | 搜索态 | DOM 注入关键词 `node` | 高亮 mark 形态、排序、语义色 ≤1 |
-| 05/06 | Drawer | 点击首行 | 18px/11px/中文分区（含「应用与项目」首区）/按钮语法/十项信息 |
+| 05/06 | Drawer | 点击首行 | 18px/11px/双语分区与双语 dt 内联（含「APPLICATION / PROJECT 应用与项目」首区）/按钮语法/十项信息 |
 | 07/08 | 历史 Tab | 脚本内起停 `127.0.0.1:18123` HTTP 服务生成一条会话 | 分段控件/区间时长格式/PROJECT 并入 |
 | 09/10 | 确认弹窗 | 点击 USER 行「结束」 | 红 pill 主钮/scrim/18px/文案 |
 | 11/12 | 强制弹窗（PENDING_FORCE） | 脚本内起**忽略 SIGTERM** 的监听进程（`python3 -c`：`signal.signal(SIGTERM, SIG_IGN)` + http.server 监听临时端口）→ 点击该行「结束」→ 等 KillPolicy 3s 宽限转 PENDING_FORCE → 弹窗截图；收尾对助手进程补 SIGKILL 清理。脚本构造失败时**改道人工采集**（QA 按同一状态触发，验收口径不变） | 「进程未响应 SIGTERM」文案/红主钮语法/scrim |
-| 13/14 | 设置 popover | 点击页眉设置图标钮 | 11px 面/hairline/周期三档文案/锚定位置 |
+| 13/14 | 设置 popover | 点击页眉设置图标钮 | 11px 面/hairline/「Scan Interval 扫描周期」双语标签与「1 秒 / 2 秒 / 5 秒」三档（v1.3 UIR3-004）/锚定位置 |
 | 15/16 | 空态 | 搜索 `zzzz` | 空态文案/居中/无残骸 |
 | 17/18 | 禁用态 | 搜索 `SYSTEM`（protectionLevel 可检索，fields.ts:77） | 禁用对比/tooltip 挂载点/无红色 |
 
 采集顺序暗色在前（R-UI-4：暗色为第一观感达标项，先行评审先行修复）。
+
+**v1.2 双语标签的重采口径**：双语化不新增截图状态——**张数维持 24（18 主档 + 6 张 2560 档）不变**；全部既有截图按双语形态采集与判定：表头双语堆叠在所有表格态（#01–04/07–08/15–18 及 2560 档）可见，双语 dt 内联在 #05/06 可见，设置双语标签在 #13/14 可见；走查锚点 3（行内文本单行）扩展为「双语标签自身不换行、不撑破 dt/列宽」（§5.4/§5.7 宽度推算的复核点）。
 
 ### 10.2 采集方式（1280 主档 + 2560 第二遍，v1.1 按 M-02 增补）
 
@@ -486,10 +511,10 @@ Modal：18px/elevated/shadow/scrim、ok=pill 红、cancel=8px 次级；SettingsM
 
 1. 画布层级正确：暗色近黑 tile 系（非纯黑）、明色白/羊皮纸；旧蓝紫/旧深蓝底无残留。
 2. 常态列表无红色元素（搜索态允许 mark 蓝；确认弹窗允许红主钮）。
-3. 行内文本单行、无断词、无 `· LISTEN` 式混排；数字纵向等宽对齐。
+3. 行内文本单行、无断词、无 `· LISTEN` 式混排；数字纵向等宽对齐；**双语标签自身不换行、不撑破 dt/列宽**（v1.3 MINOR-UIR3-001）。
 4. 行分隔仅 hairline 一种；无斑马纹、无表格外框。
 5. 搜索框 pill + 44px + ⌘K 键帽；图标 muted。
-6. Drawer 左缘 18px + hairline + 分区中文 + 底部按钮语法。
+6. Drawer 左缘 18px + hairline + **分区双语（EN 主行 + CN 辅助，首区『APPLICATION / PROJECT 应用与项目』）** + 底部按钮语法（v1.3 MINOR-UIR3-001）。
 7. 禁用态按钮低对比但 ≥3:1 观感、保护原因可见（抽屉图判行内文案，列表图判 tooltip 锚点）。
 8. 统计条：琥珀仅出现在「对外」且仅 >0 时；其余中性。
 9. 页眉：无系统标题重复、交通灯不压内容、右侧仅紧凑图标钮 + 状态点。
@@ -509,7 +534,7 @@ IPC 契约（channel 集合、入参出参、方向）、`src/shared/ipc-contrac
 
 ### 11.2 用户可见行为变化（全部由需求 §3/§5/§6/§8 授权）
 
-hiddenInset 合并标题（D-UI-05）；时长紧凑格式（#17）；Tab 分段化与计数格式「当前 N」（#14/UI-AC-19）；行内按钮三级语法与禁用原因可见（#1/#10）；地址 tooltip 与 `→`（#3/#17）；主题名「浅色/深色」+ 图标化（D-UI-07）；保护拒绝提示由 warning 改 error（#6 语义守卫）；高亮 mark 文字色 accent→ink（§4.1 派生裁定 5）；R-01 横幅中性化（#6）；设置入口 popover 首次界面化 scanInterval（D-UI-07，见 11.4）。
+hiddenInset 合并标题（D-UI-05）；时长紧凑格式（#17）；Tab 分段化与计数格式「当前 N」（#14/UI-AC-19）；行内按钮三级语法与禁用原因可见（#1/#10）；地址 tooltip 与 `→`（#3/#17）；主题名「浅色/深色」+ 图标化（D-UI-07）；保护拒绝提示由 warning 改 error（#6 语义守卫）；高亮 mark 文字色 accent→ink（§4.1 派生裁定 5）；R-01 横幅中性化（#6）；设置入口 popover 首次界面化 scanInterval（D-UI-07，见 11.4）；**数据指标标签双语化（v1.2 用户反馈，§11.5）**——表头双行堆叠（EN 大写主行 + CN 辅助行）、统计条双语标签、抽屉分区标题与 dt 双语内联、设置标签双语。
 
 ### 11.3 兼容与迁移
 
@@ -518,6 +543,17 @@ hiddenInset 合并标题（D-UI-05）；时长紧凑格式（#17）；Tab 分段
 ### 11.4 范围解释登记（交 reviewer 裁定，非自批）
 
 「设置入口」popover 为 D-UI-07/UI-AC-21 明列控件的**最小实现**：现仓 scanInterval 已在 settings 契约与 SettingsStore 中存在但无 UI（§2.3 证据）；本方案将其界面化，不新增设置项/channel/存储。若 reviewer 认定该界面化超出「仅视觉与交互层」边界，裁剪路径 = 移除 SettingsMenu.vue 与 setScanInterval action，页眉仅留主题图标钮（不影响其余任何 AC）。
+
+### 11.5 语义守卫登记（v1.2，用户反馈回流：双语标签）
+
+- **用户原话**（2026-09-23，主理人转达）：「这些指标应该在下方弄个字号小一点、颜色浅一些的字体标注中文意思，相当于指标都需要中英文两个同时显示——因为计算机专业角度都用英文，但有时候不认识时可以借助中文理解」。附截图两枚（旧版全英文表头行与 Drawer 分区/字段标签；其中 Exposure 值「Local · 仅本机」为用户认可的值层双语形态，本规则即将其扩展至标签层）。
+- **用户-directed 变更**（对需求记录 `portgate-ui-redesign-requirements-v1.md` 的覆盖关系，机制同 §8 D-UI-09）：
+  1. 需求 §6-3「表头统一中文、不再使用全大写英文表头」→ **双语表头**（EN 大写主行 + CN 辅助行，§5.4）；
+  2. 需求 §6-4 统计标签「端口 46 · … · 对外 5」中文形态 → **「Ports 端口数 46 · … · Exposed 对外 5」双语形态**（§5.2/§8.3）；
+  3. UI-AC-22 自动化口径中「全大写英文表头消失」→ **「表头双语且 EN 大写出自常量表」**（§8.5-2/3/4；UI-AC-22 其余断言——2m 紧凑格式/`…`/`→`/文案集中常量表——不变）；
+  4. 走查域扩展：数据指标标签均须双语呈现且 CN 辅助行字号更小、视觉更浅（复用 `--pg-muted`，§4.5）。
+- **零影响声明**：§4 token 数值体系零变更（中文辅助行复用既有次要文本 token，无新色/新字号档外值入断言域）；控件/状态/空态/按钮纯中文域不变；IPC/数据语义/安全边界零变更；fields.ts 零变更。
+- **生效条件**：本方案 v1.2 经审查闭环后，上述需求记录条款由 PM/主理人 lane 同步更新（方案不直改 PRD）；若 PM 复核否决，回退本节全部变更并重新进入审查。
 
 ---
 
@@ -565,3 +601,8 @@ hiddenInset 合并标题（D-UI-05）；时长紧凑格式（#17）；Tab 分段
 |---|---|---|---|---|---|
 | 初稿（v1.0） | PLAN_READY_FOR_REVIEW | 0（待审） | 0（待审） | 0（待审） | 提交全新独立 reviewer 对抗审查；批准硬条件 = blocker/major/未决假设/证据缺口均为 0 |
 | 第 1 轮（ui-reviewer-r1，全新实例） | REVISE（0 blocker / 2 major / 5 minor / 未决假设 0 / 证据缺口 0） | 0 | 2 | 5 | 升版 v1.1 逐项修订：**M-01 接受（采纳审查者替代②）**：删除 `--pg-danger-tint` 派生档，hover 升格=文字/描边升 `--pg-danger-text`+底素面（依据：tint 叠加对暗 4.447/4.259、明 4.375 均 <4.5 且不在断言矩阵；素面四对 5.38/4.94/5.29/5.08 达标），修订位置 §4.1 表×2、§4.1 派生裁定 7（新）、§4.6 补注、§5.5-1。**M-02 接受**：§10.1 增强制弹窗（#11/12，脚本起忽略 SIGTERM 进程走 PENDING_FORCE，失败改道人工）与设置 popover（#13/14），§10.2 增 2560 档第二遍（列表/搜索态/历史 ×双主题=6 张，合计 24），§1.2 行 15/25 同步，§13 D-UI-C 判据改 24 张。**m-01 接受**：§1.2 行 03 改引 §4.1 派生裁定 5、行 04 改引 §4.3（阶段 A→B 与 §4.7 分级对齐）、§2.2 行「§5.9」同改、需求引用消歧（§2/§6-5/§6-7）。**m-02 接受**：明色表补 `--pg-bg`/`--pg-elevated` 两行并纳入三处同源断言（§4.1）。**m-03 接受**：§6 改为「projectPath 自 V1 起仅参与检索、不在抽屉渲染，本次维持该口径」（补 `DetailDrawer.vue:216-223` 证据）。**m-04 接受**：§5.7 分区改五区、首区「应用与项目」含两行落位，§8.1 补「应用」「项目」键。**m-05 接受**：§10.4 补「双击页眉缩放行为确认可接受」，与 D-UI-A 判据对应。修订后状态仍为 PLAN_READY_FOR_REVIEW |
+| v1.2 回写（用户反馈回流，主理人指令；**语义守卫命中：改 §8 文案策略**） | 定向修订（随下一轮全新 reviewer 一并裁定） | — | — | — | **用户原话要点**：「这些指标应该在下方弄个字号小一点、颜色浅一些的字体标注中文意思，相当于指标都需要中英文两个同时显示」（附旧版全英文表头/Drawer 截图；认可「Local · 仅本机」值层双语形态）。**修订内容**：① §8 重构为双语标注规则——适用域（数据指标标签）/豁免域（TCP/UDP/CPU 判据=缩写是否已脱离英文原词被通用理解；Exposed/PID 不豁免）/纯中文保留域（控件与状态，需求 §6-1 不变）/双语定名对照总表（表头 6+历史 4+统计 4+抽屉五区+抽屉字段 18+设置，逐字采纳用户草案定名，术语核对见 §8.2）；② §4.5 增「双语辅助行」11px/400 `--pg-muted` 定档（复用既有 token，无档外值）+ 大写规则修订（CSS 层禁令不变、数据级大写合法域=表头/分区 EN 主行）；③ §5.4 表头双行堆叠与表头带 36–40→约 48px 密度核定（UI-AC-10 度量对象为数据行，不变）、§5.7 分区标题与 dt 双语内联（dt 104→156px，宽度推算；内联 over 堆叠理由）、§5.1/§5.2 设置与统计双语；④ copy.ts `BilingualLabel{en,cn|null}` 结构 + copy-contract 断言扩展（§8.5-1/2 双语对完整性与 EN 形态，阶段 A 激活）；⑤ 截图张数不变（24），§10.1 锚点补双语并注明重采口径；⑥ §11.2 行为变化增补 + **§11.5 语义守卫登记**（覆盖需求 §6-3/§6-4 与 UI-AC-22 部分口径，PM lane 同步为生效条件）；⑦ §1.2 行 22、§3.1 文件清单、§9 三阶段影响面同步。**除本反馈外未做任何其他改动**；§4 token 数值体系零变更。修订后状态仍为 PLAN_READY_FOR_REVIEW |
+| 第 2 轮（ui-reviewer-r2，全新实例，对 v1.1） | **APPROVE**（0 blocker / 0 major / 3 minor / 未决假设 0 / 证据缺口 0） | 0 | 0 | 3 | MINOR-UIR2-001~003 留存 r2 的 minor_follow_up_list_v1（处置细节见 r2 裁决记录，均已闭环）；v1.1 维持批准 |
+| 实施期修复登记（v1.1 实现入库后，实施期事实） | — | — | — | — | 用户以**提交 94af11d**（HEAD）入库 v1.1 实现与两项视觉修复：**on-primary P1 修复、端口列 140 P2 修复、capture 链路加固**。主理人裁定「**实施已锁定基线优先**」；本方案 v1.3 以实施回写方式对齐该事实（§4.1 `--pg-on-primary`、§5.4 端口列 140px、§9 阶段 A theme.ts 字段） |
+| 第 3 轮（ui-reviewer-r3，全新实例，对 v1.2） | **APPROVE**（0 blocker / 0 major / 4 minor / 未决假设 0 / 证据缺口 0） | 0 | 0 | 4 | **双语规范本体通过**；MINOR-UIR3-001~004 均为文本一致性项，主理人已裁定处置（见下行 v1.3 勘误行） |
+| v1.3 勘误（主理人裁定；纯文本对齐、无设计变更） | 勘误升版（批准状态维持第 3 轮裁决） | 0 | 0 | 0 | **MINOR-UIR3-003 接受（实施回写）**：§5.4 端口列 120→140px（理由：5 位数端口+协议+对外单行容纳；copy.ts/copy-contract 断言已锁定）；§4.1 双表增 `--pg-on-primary:#ffffff`（DESIGN.md on-primary 键、主题无关档入 `:root`）并纳入 §4.6 断言矩阵（on-primary×danger-fill=5.38 ≥4.5）与 §4.7 三处同源范围（theme.ts ThemeTokens 补字段列入 §9 阶段 A）。**MINOR-UIR3-004 接受**：扫描周期值形态维持「1 秒 / 2 秒 / 5 秒」（copy-contract 断言与 v1.1 批准口径锁定；v1.2 的 1s/2s/5s 为未声明漂移不实施）——§5.1/§8.1-2/§8.2/§8.5-1/§10.1 五处修正。**MINOR-UIR3-001 接受**：§10.3 锚点 3 补「双语标签自身不换行、不撑破 dt/列宽」、锚点 6 改分区双语表述。**MINOR-UIR3-002 接受**：§8.2 抽屉字段组补「Application 应用 / Project 项目」（计数 18→20）、§8.5-1 五组改六组（设置组纳入逐对断言）、§5.7 首区 dt 措辞对齐。本行之外另增第 2 轮/实施期/第 3 轮三行登记 |

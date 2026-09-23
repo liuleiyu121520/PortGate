@@ -24,6 +24,7 @@ export interface ThemeTokens {
   success: string
   disabled: string
   elevated: string
+  onPrimary: string
   highlightBg: string
   scrim: string
   shadowOverlay: string
@@ -48,6 +49,7 @@ export const THEME_TOKENS: Record<ThemeName, ThemeTokens> = {
     success: '#1e8e5a',
     disabled: '#7a7a7a',
     elevated: '#ffffff',
+    onPrimary: '#ffffff',
     highlightBg: 'rgba(0, 102, 204, 0.16)',
     scrim: 'rgba(0, 0, 0, 0.32)',
     shadowOverlay: '0 12px 40px rgba(0, 0, 0, 0.16)'
@@ -70,6 +72,7 @@ export const THEME_TOKENS: Record<ThemeName, ThemeTokens> = {
     success: '#30d158',
     disabled: '#808082',
     elevated: '#2a2a2c',
+    onPrimary: '#ffffff',
     highlightBg: 'rgba(41, 151, 255, 0.22)',
     scrim: 'rgba(0, 0, 0, 0.5)',
     shadowOverlay: '0 12px 40px rgba(0, 0, 0, 0.5)'
