@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --publish never"
   },
   "dependencies": {
     "ant-design-vue": "^4.2.6",

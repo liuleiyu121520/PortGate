@@ -35,11 +35,13 @@ npx electron-builder --linux AppImage deb --publish never
 网络受限/离线打包（Electron 二进制下载被重置时）：
 
 electron-builder 每次打包都会拉取 Electron 发行 zip，弱网环境下可能报
-`The server aborted pending request`。两种处理方式：
+`The server aborted pending request`。`npm run dist` 会自动加载本地 `.env`
+（不入库；模板见 `.env.example`，复制后取消注释即可）。
 
 ```bash
-# 方式一：走 npmmirror 镜像
-ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/" npm run dist
+# 方式一（推荐先试）：.env 里设镜像源后直接打包
+#   .env: ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm run dist
 
 # 方式二：完全离线——用本机已缓存的 Electron zip（首次需解压一次）
 ZIP=~/Library/Caches/electron/bb424f9061e7a2927a7fcc04709593fe81ac4633e2cd40456f2ef431743b1ee7/electron-v44.4.3-darwin-arm64.zip
