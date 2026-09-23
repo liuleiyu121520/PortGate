@@ -1,6 +1,6 @@
 {
   "name": "portgate",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "本机端口、进程、应用、项目之间的可视化监控与安全管理工具",
   "main": "out/main/index.js",
   "private": true,
