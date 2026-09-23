@@ -25,6 +25,13 @@ npx electron-builder --win nsis --publish never     # Windows（CI 或具备 win
 npx electron-builder --linux AppImage deb --publish never
 ```
 
+> **⚠️ 务必用 `npm run dist`（或先 `npm run build`）**：electron-builder 只打包 `out/` 里
+> 已有的构建产物，自己不会构建。源码更新后若直接 `npx electron-builder`，会把**过期的
+> 旧界面**打进安装包（症状：新窗口行为 + 旧 UI、文案缺失等）。`npm run dist` =
+> `npm run build && electron-builder`，始终打包最新源码。
+> 打包后自检：dmg 内 `app.asar` 应包含 `pg-th`/「应用与项目」等新标记、不含 `Cloud Slate` 旧标记：
+> `grep -ac "pg-th" dist/mac-arm64/PortGate.app/Contents/Resources/app.asar`（挂载 dmg 后路径同理）。
+
 未签名口径（R-07/R-08，方案 m-07）：
 
 - macOS 构建固定 `identity: null`，且打包命令环境带 `CSC_IDENTITY_AUTO_DISCOVERY=false`，杜绝证书存在时被自动签名。
