@@ -19,10 +19,10 @@ npm run typecheck   # tsc / vue-tsc
 ## 打包（electron-builder）
 
 ```bash
-npm run dist                 # 当前平台打包（macOS 产出 .dmg，输出到 dist/）
-npx electron-builder --mac dmg --publish never
-npx electron-builder --win nsis --publish never     # Windows（CI 或具备 wine 的环境）
-npx electron-builder --linux AppImage deb --publish never
+npm run pack:mac             # macOS 双架构（Apple Silicon + Intel 各一个 .dmg）
+npm run pack:win             # Windows .exe（NSIS；mac 上可交叉构建，CI 原生构建）
+npx electron-builder --linux AppImage deb --publish never   # Linux（CI 或按需）
+npm run dist                 # 兼容别名：当前平台打包（等价 build + electron-builder）
 ```
 
 > **⚠️ 务必用 `npm run dist`（或先 `npm run build`）**：electron-builder 只打包 `out/` 里
@@ -42,11 +42,11 @@ npx electron-builder --linux AppImage deb --publish never
 网络受限/离线打包（Electron 二进制下载被重置时）：
 
 electron-builder 每次打包都会拉取 Electron 发行 zip，弱网环境下可能报
-`The server aborted pending request`。`npm run dist` 会自动加载本地 `.env`
+`The server aborted pending request`。`npm run dist`（及 `pack:mac` / `pack:win`）会自动加载本地 `.env`
 （不入库；模板见 `.env.example`，复制后取消注释即可）。
 
 ```bash
-# 方式一（推荐先试）：.env 里设镜像源后直接打包
+# 方式一（推荐先试）：.env 里设镜像源后直接打包（npm run pack:mac / pack:win / dist）
 #   .env: ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 npm run dist
 
