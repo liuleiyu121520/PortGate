@@ -1,0 +1,9 @@
+# pnpm 配置（pnpm 11 起仅读取本文件；npm 忽略此文件）
+# hoisted 布局：与 npm 目录结构一致，electron-builder 打包兼容
+nodeLinker: hoisted
+# allowBuilds：允许执行安装脚本的依赖白名单（供应链显式批准，勿随意扩大）
+allowBuilds:
+  better-sqlite3: true
+  core-js: true
+  electron-winstaller: true
+  esbuild: true

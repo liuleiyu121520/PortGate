@@ -21,8 +21,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dist": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --publish never",
-    "pack:mac": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --mac dmg --arm64 --x64 --publish never",
-    "pack:win": "npm run build && node --env-file-if-exists=.env node_modules/electron-builder/cli.js --win nsis --publish never"
+    "pack:mac": "node --env-file-if-exists=.env scripts/pack.js mac",
+    "pack:win": "node --env-file-if-exists=.env scripts/pack.js win"
   },
   "dependencies": {
     "ant-design-vue": "^4.2.6",

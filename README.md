@@ -16,6 +16,12 @@ npm run lint        # ESLint（含 AC-16 边界守护规则）
 npm run typecheck   # tsc / vue-tsc
 ```
 
+## 包管理器
+
+- **npm**（主包管理器）：依赖锁定在 `package-lock.json`，CI 使用 `npm ci`。
+- **pnpm** 亦受支持：`pnpm-workspace.yaml` 已配置 `allowBuilds` 构建脚本白名单（better-sqlite3/esbuild/core-js/electron-winstaller）与 `nodeLinker: hoisted`（electron-builder 兼容）。直接 `pnpm pack:mac` / `pnpm pack:win` 即可。
+- 两种包管理器**不要混装**同一 `node_modules`：切换时先 `rm -rf node_modules` 再安装。
+
 ## 打包（electron-builder）
 
 ```bash
